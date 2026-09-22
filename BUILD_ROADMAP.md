@@ -194,9 +194,21 @@ export const PROMPT_VERSION = {
 
 ## A3 — Database: Neon + Drizzle schema + first migration
 
+> **Amended during the build:** local development runs **Docker Postgres 17**
+> (`docker-compose.yml`, host port **15432**), not Neon. Neon remains the
+> deployment target at D0 — the connection string is the only thing that
+> changes, because Drizzle and the migration SQL are identical either way.
+> Port 15432 rather than 5432 because this machine already runs an unrelated
+> Postgres container plus two native `postgresql-x64` services occupying
+> 5432, 5433 and 5435. A native service shadowing a published container port
+> surfaces as a *password authentication failure*, not a connection error,
+> which costs time to diagnose.
+
 **Do**
 
-1. Create a Neon project, copy the pooled connection string into `apps/api/.env` as `DATABASE_URL`.
+1. `docker compose up -d`, then put the local URL in `apps/api/.env` as
+   `DATABASE_URL`. (Original plan: create a Neon project and use its pooled
+   connection string — still what D0 does.)
 2. `cd apps/api && bun add drizzle-orm postgres && bun add -D drizzle-kit`.
 3. `apps/api/drizzle.config.ts`:
 

@@ -1,0 +1,37 @@
+# Local Postgres for development.
+#
+# Deviation from EMR_PLAN §2.3, recorded deliberately: the plan picks Neon so
+# the database survives a container host's ephemeral filesystem. That reasoning
+# still holds for DEPLOYMENT (D0) -- this compose file is for local development
+# only, and the production target remains managed Postgres.
+#
+# The named volume is what makes this survive `docker compose down`; only
+# `down -v` destroys it.
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: emr-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: emr
+      POSTGRES_PASSWORD: emr_local_dev
+      POSTGRES_DB: emr
+    ports:
+      # Host 15432, deliberately outside the 5432-5436 range: this machine
+      # already runs an unrelated Postgres container and two native
+      # postgresql-x64 services, which occupy 5432, 5433 and 5435. A native
+      # service shadowing the container's published port fails as an auth
+      # error, not a connection error, which is confusing to debug.
+      # Inside the container it is still 5432.
+      - '15432:5432'
+    volumes:
+      - emr_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Migrations must not run against a half-started server.
+      test: ['CMD-SHELL', 'pg_isready -U emr -d emr']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  emr_pgdata:
