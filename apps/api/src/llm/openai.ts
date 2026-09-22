@@ -10,9 +10,15 @@
  * accounting, and the mapping from provider failures to LlmFailure, all of
  * which are the same regardless of what the prompt says.
  */
-import { LIMITS, PROMPT_VERSION } from '@emr/shared'
+import { LIMITS, PROMPT_VERSION, StructuredNote } from '@emr/shared'
 import OpenAI from 'openai'
 import { log } from '../log.ts'
+import {
+  buildStructureUserPrompt,
+  STRUCTURE_SCHEMA_NAME,
+  STRUCTURE_SYSTEM_PROMPT,
+  STRUCTURE_TEMPERATURE,
+} from './prompts/structure.ts'
 import {
   countIllegible,
   isRefusal,
@@ -20,6 +26,7 @@ import {
   TRANSCRIBE_TEMPERATURE,
   TRANSCRIBE_USER_PROMPT,
 } from './prompts/transcribe.ts'
+import { toStrictSchema } from './strict-schema.ts'
 import {
   type CallMeta,
   type LlmClient,
@@ -30,6 +37,15 @@ import {
   type TranscribeInput,
   type TranscribeOutput,
 } from './types.ts'
+
+/**
+ * The strict-mode form of StructuredNote, built once at module load.
+ *
+ * Converted rather than handed over raw: strict decoding rejects the
+ * length and size keywords our schema carries for HTTP validation. See
+ * `strict-schema.ts` for why stripping them loses nothing.
+ */
+const STRICT_NOTE_SCHEMA = toStrictSchema(StructuredNote)
 
 /**
  * Output-length sanity bound for stage 1 (E36).
@@ -155,14 +171,112 @@ export class OpenAiClient implements LlmClient {
   /**
    * Stage 3 -- structuring (§4.5).
    *
-   * The prompt and the strict-output schema arrive at B3, for the same
-   * reason as above.
+   * Corrected text in, schema-constrained JSON out. Two guardrails operate
+   * here and they are not interchangeable: strict decoding makes the SHAPE
+   * impossible to violate, and the prompt argues about what belongs in it.
+   * Neither establishes truth, which is why `raw` stays `unknown` and stage
+   * 4 still runs.
    */
-  async structureNotes(_input: StructureInput): Promise<StructureOutput> {
-    throw new LlmError(
-      LlmFailure.Unavailable,
-      'Structuring prompt not yet implemented (lands at B3).',
-    )
+  async structureNotes(input: StructureInput): Promise<StructureOutput> {
+    const startedAt = Date.now()
+    const promptVersion = PROMPT_VERSION.structuring
+
+    let response: Awaited<ReturnType<OpenAI['chat']['completions']['create']>>
+    try {
+      response = await this.client.chat.completions.create({
+        model: this.textModel,
+        temperature: STRUCTURE_TEMPERATURE,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: STRUCTURE_SCHEMA_NAME,
+            // Constrained decoding, not a post-hoc check: the model cannot
+            // emit a `bloodPressure` key at all (E13).
+            strict: true,
+            schema: STRICT_NOTE_SCHEMA,
+          },
+        },
+        messages: [
+          { role: 'system', content: STRUCTURE_SYSTEM_PROMPT },
+          {
+            role: 'user',
+            content: buildStructureUserPrompt(input.notes, input.repairFeedback),
+          },
+        ],
+      })
+    } catch (error) {
+      throw new LlmError(classifyOpenAiError(error), 'Structuring call failed.', {
+        meta: { model: this.textModel, promptVersion },
+        cause: error,
+      })
+    }
+
+    const meta = buildMeta({
+      model: this.textModel,
+      promptVersion,
+      startedAt,
+      usage: response.usage,
+    })
+
+    const choice = response.choices[0]
+
+    // A safety refusal arrives as a dedicated field, not as content (E18).
+    // Without this branch it reads as empty output and gets reported as a
+    // technical fault, which is the generic-failure problem E21 warns about.
+    const refusal = choice?.message?.refusal
+    if (typeof refusal === 'string' && refusal.trim() !== '') {
+      log.info('structuring refused by the model', { model: meta.model })
+      throw new LlmError(
+        LlmFailure.Refused,
+        'The model declined to structure these notes.',
+        {
+          meta,
+        },
+      )
+    }
+
+    // E36 -- strict decoding can still stop early on the token budget,
+    // leaving syntactically truncated JSON.
+    if (choice?.finish_reason === 'length') {
+      throw new LlmError(
+        LlmFailure.BadOutput,
+        'The structured note was cut off before it was complete.',
+        { meta },
+      )
+    }
+
+    const content = choice?.message?.content?.trim() ?? ''
+    if (content === '') {
+      throw new LlmError(LlmFailure.BadOutput, 'The model returned no structured note.', {
+        meta,
+      })
+    }
+
+    let raw: unknown
+    try {
+      raw = JSON.parse(content)
+    } catch (error) {
+      // Should be unreachable under strict decoding. Handled anyway: the
+      // guarantee is the provider's, and an unhandled throw here would
+      // surface as a 500 rather than a retryable failure.
+      throw new LlmError(LlmFailure.BadOutput, 'The model returned invalid JSON.', {
+        meta,
+        cause: error,
+      })
+    }
+
+    log.info('structuring complete', {
+      model: meta.model,
+      promptVersion,
+      latencyMs: meta.latencyMs,
+      retry: input.repairFeedback !== undefined,
+      inputTokens: meta.inputTokens,
+      outputTokens: meta.outputTokens,
+    })
+
+    // Deliberately NOT cast to StructuredNote -- shape is guaranteed, truth
+    // is not, and the caller must validate (§4.5).
+    return { raw, meta }
   }
 
   /** Exposed for B2/B3 to build on; kept here so the SDK stays in one file. */

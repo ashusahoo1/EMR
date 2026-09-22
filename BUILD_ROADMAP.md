@@ -474,6 +474,12 @@ Enforce the size cap server-side independently of the client (E32, E33).
 
 1. `src/llm/prompts/structure.ts`, versioned `structure-v1`.
 2. Convert `StructuredNote` (A2) to JSON Schema and pass it as OpenAI strict structured output. TypeBox *is* JSON Schema, so this should be a direct handoff (§2.3). If strict mode rejects it, the usual cause is a `t.Union` — flatten it and note the workaround.
+
+> **Amended during the build:** the predicted cause was wrong, and no flattening was needed. `t.Union` is **not** the problem — nested `anyOf` is inside strict mode's supported subset, and OpenAI's own documentation uses `anyOf: [{…}, {"type": "null"}]` for exactly our nullable `chiefComplaint`. It passes through untouched.
+>
+> What strict mode actually rejects is the **value-level keywords**: `minLength`, `maxLength`, `maxItems`, `pattern`, `format`, `minimum`/`maximum`, `uniqueItems`, `default`. Strict mode works by constrained decoding, so every keyword must be expressible as a grammar rule; "at most 500 characters" is not knowable until after the tokens are emitted. Our schema carries `maxLength` on every `SourcedItem` field and `maxItems` on every array, because the same schema also validates the HTTP boundary where those limits are real enforcement.
+>
+> The handoff is therefore a **recursive keyword-stripping conversion** (`src/llm/strict-schema.ts`), not a direct pass or a flatten. Stripping loses nothing: the model's output is still validated against the *full* schema afterwards (§4.5 — "provider enforcement guarantees shape, not truth"). The converter also asserts strict mode's two structural rules (`additionalProperties: false`, every property in `required`) so a future field cannot regress them silently, and rejects `t.Optional` with a message pointing at the union-with-null fix.
 3. Prompt rules, each with a worked example drawn from the golden set:
    - Ask for the **verbatim substring** as `sourceSpan`, never character offsets (§4.5 — models cannot count characters reliably).
    - Empty arrays are a **correct answer**. Say it explicitly; models pad to look complete. (N06, N10.)
