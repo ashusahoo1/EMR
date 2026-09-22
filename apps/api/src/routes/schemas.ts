@@ -6,7 +6,7 @@
  * which silently degrades the frontend to `any` -- the exact failure the C0
  * done-when check is written to catch.
  */
-import { StructuredNote, VerificationResult } from '@emr/shared'
+import { LIMITS, StructuredNote, VerificationResult } from '@emr/shared'
 import { t } from 'elysia'
 
 /** Path parameter: a single UUID called `id`. */
@@ -68,6 +68,43 @@ export const ConsultationResponse = t.Object({
     verification: t.Union([VerificationResult, t.Null()]),
     createdAt: t.String(),
     updatedAt: t.String(),
+  }),
+})
+
+// --- Write route bodies ----------------------------------------------------
+
+export const CreateConsultationBody = t.Object({
+  appointmentId: t.String({ format: 'uuid' }),
+  rawNotes: t.Optional(t.String({ maxLength: LIMITS.notesMaxChars })),
+})
+
+export const UpdateConsultationBody = t.Object({
+  rawNotes: t.Optional(t.String({ maxLength: LIMITS.notesMaxChars })),
+  aiNote: t.Optional(StructuredNote),
+  confirmedNote: t.Optional(StructuredNote),
+})
+
+export const ConfirmConsultationBody = t.Object({
+  confirmedNote: StructuredNote,
+})
+
+export const AppointmentStatusBody = t.Object({
+  status: t.Union([
+    t.Literal('waiting'),
+    t.Literal('in_consultation'),
+    t.Literal('completed'),
+  ]),
+})
+
+export const AppointmentResponse = t.Object({
+  appointment: t.Object({
+    id: t.String(),
+    doctorId: t.String(),
+    patientId: t.String(),
+    scheduledAt: t.String(),
+    reason: t.Union([t.String(), t.Null()]),
+    status: t.String(),
+    createdAt: t.String(),
   }),
 })
 

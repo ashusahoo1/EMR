@@ -12,6 +12,7 @@ import { swagger } from '@elysiajs/swagger'
 import { Elysia } from 'elysia'
 import { handleError } from './error-handler.ts'
 import { readRoutes } from './routes/read.ts'
+import { writeRoutes } from './routes/write.ts'
 
 export const app = new Elysia()
   .use(
@@ -37,5 +38,6 @@ export const app = new Elysia()
   .onError(handleError)
   .get('/health', () => ({ ok: true as const }))
   .use(readRoutes)
+  .use(writeRoutes)
 
 export type App = typeof app

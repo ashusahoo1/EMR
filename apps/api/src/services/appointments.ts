@@ -5,10 +5,15 @@
  * split is what lets A9's tests exercise behaviour without going through
  * HTTP for every assertion.
  */
-import { CLINIC_TIMEZONE } from '@emr/shared'
+import {
+  ALLOWED_APPOINTMENT_TRANSITIONS,
+  type AppointmentStatus,
+  CLINIC_TIMEZONE,
+} from '@emr/shared'
 import { and, asc, eq, sql } from 'drizzle-orm'
 import { db } from '../db/client.ts'
 import { appointments, consultations, patients } from '../db/schema.ts'
+import { AppError, ErrorCode } from '../errors.ts'
 
 export interface AppointmentListItem {
   id: string
@@ -88,4 +93,71 @@ export async function findConsultationForAppointment(appointmentId: string) {
     .where(and(eq(consultations.appointmentId, appointmentId)))
     .limit(1)
   return row
+}
+
+export interface AppointmentDetail {
+  id: string
+  doctorId: string
+  patientId: string
+  scheduledAt: string
+  reason: string | null
+  status: AppointmentStatus
+  createdAt: string
+}
+
+/**
+ * Move an appointment through its lifecycle (F15, E31).
+ *
+ * Validated against ALLOWED_APPOINTMENT_TRANSITIONS here, at the API, not in
+ * the UI. §5.6 is explicit: hiding an invalid transition behind a disabled
+ * button does not count, because the endpoint is still reachable.
+ *
+ * Re-applying the current status is a no-op success rather than a conflict --
+ * a double-clicked "Start consultation" should not show the doctor an error
+ * for something that already happened (same reasoning as E25).
+ */
+export async function updateAppointmentStatus(
+  id: string,
+  next: AppointmentStatus,
+): Promise<AppointmentDetail> {
+  const [existing] = await db
+    .select()
+    .from(appointments)
+    .where(eq(appointments.id, id))
+    .limit(1)
+  if (!existing) throw new AppError(ErrorCode.APPOINTMENT_NOT_FOUND)
+
+  const current = existing.status
+
+  if (current === next) {
+    return toAppointmentDetail(existing)
+  }
+
+  const allowed = ALLOWED_APPOINTMENT_TRANSITIONS[current] ?? []
+  if (!allowed.includes(next)) {
+    throw new AppError(ErrorCode.INVALID_STATUS_TRANSITION, {
+      message: `Cannot move an appointment from ${current} to ${next}.`,
+      details: { from: current, to: next, allowed: [...allowed] },
+    })
+  }
+
+  const [row] = await db
+    .update(appointments)
+    .set({ status: next })
+    .where(eq(appointments.id, id))
+    .returning()
+  if (!row) throw new AppError(ErrorCode.APPOINTMENT_NOT_FOUND)
+  return toAppointmentDetail(row)
+}
+
+function toAppointmentDetail(row: typeof appointments.$inferSelect): AppointmentDetail {
+  return {
+    id: row.id,
+    doctorId: row.doctorId,
+    patientId: row.patientId,
+    scheduledAt: row.scheduledAt.toISOString(),
+    reason: row.reason,
+    status: row.status,
+    createdAt: row.createdAt.toISOString(),
+  }
 }
