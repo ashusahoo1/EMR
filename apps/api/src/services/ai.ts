@@ -28,6 +28,7 @@ import { getLlmClient } from '../llm/index.ts'
 import { isLlmError, LlmFailure } from '../llm/types.ts'
 import { log } from '../log.ts'
 import { getConsultation, updateConsultation } from './consultations.ts'
+import { precheckImage } from './upload.ts'
 
 /**
  * Whether AI assistance is available.
@@ -176,20 +177,22 @@ export async function transcribeImage(file: {
   size: number
   bytes: Uint8Array
 }): Promise<TranscribeResult> {
-  const client = requireLlm()
+  /**
+   * Stage 0 BEFORE the client is resolved, deliberately.
+   *
+   * A bad image should be rejected on its own merits, not reported as "AI
+   * unavailable" because the key happens to be missing. It also means a
+   * rejected upload costs nothing at all -- no client construction, no call.
+   */
+  const checked = precheckImage({ bytes: file.bytes, declaredType: file.type })
 
-  // Full stage 0 precheck arrives at B1; this is the minimal guard so the
-  // rejection path exists for the frontend today.
-  if (!file.type.startsWith('image/')) {
-    throw new AppError(ErrorCode.INVALID_IMAGE_TYPE, {
-      details: { received: file.type },
-    })
-  }
+  const client = requireLlm()
 
   try {
     const result = await client.transcribeImage({
-      image: file.bytes,
-      mimeType: file.type,
+      image: checked.bytes,
+      // The type the BYTES are, not the one the upload claimed.
+      mimeType: checked.mimeType,
     })
 
     log.info('transcribed', {

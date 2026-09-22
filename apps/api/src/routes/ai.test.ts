@@ -13,6 +13,7 @@ import { app } from '../app.ts'
 import { db } from '../db/client.ts'
 import { appointments } from '../db/schema.ts'
 import { seed } from '../db/seed.ts'
+import { fakeJpeg } from '../tests/fixtures.ts'
 
 const MISSING_UUID = '00000000-0000-4000-8000-000000000000'
 
@@ -36,20 +37,14 @@ async function call<T>(
 }
 
 /**
- * Elysia's `t.File({ type })` sniffs magic bytes rather than trusting the
- * declared MIME type -- which is correct, and is what catches a .txt renamed
- * .jpg (E32). So the fixture must be a real JPEG header, not zeroed bytes.
+ * Fixtures come from tests/fixtures.ts, which builds a JPEG with a real
+ * SOF0 header.
+ *
+ * Two layers demand that now. Elysia's `t.File({ type })` sniffs magic bytes
+ * rather than trusting the declared MIME type (E32), and B1's precheck reads
+ * the dimensions out of the header and measures byte density for blur. A
+ * ten-byte "JPEG" declares no size, so it is correctly rejected as corrupt.
  */
-const JPEG_MAGIC = new Uint8Array([
-  0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46,
-])
-
-function fakeJpeg(padding = 2048): Uint8Array {
-  const bytes = new Uint8Array(JPEG_MAGIC.length + padding)
-  bytes.set(JPEG_MAGIC, 0)
-  return bytes
-}
-
 async function postImage<T>(
   filename: string,
   type: string,

@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { stubLlm } from '../llm/stub.ts'
 import { LlmFailure } from '../llm/types.ts'
+import { fakeJpeg, imageForm } from './fixtures.ts'
 import { api, freshAppointment, ok, resetDb } from './helpers.ts'
 
 /** A consultation with notes, ready to structure. */
@@ -107,17 +108,7 @@ describe('provider failures map to the doctor-facing contract', () => {
   test('E18: a refusal is NOT_CLINICAL_NOTES, distinct from a technical error', async () => {
     stubLlm.queueTranscribeFailure(LlmFailure.Refused, 'that is a selfie')
 
-    const form = new FormData()
-    form.append(
-      'image',
-      new File(
-        [new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70])],
-        'x.jpg',
-        {
-          type: 'image/jpeg',
-        },
-      ),
-    )
+    const form = imageForm(fakeJpeg(), 'x.jpg')
     const res = await (await import('../app.ts')).app.handle(
       new Request('http://localhost/transcribe', { method: 'POST', body: form }),
     )
@@ -132,17 +123,7 @@ describe('transcription flows through the seam', () => {
   test('a queued transcript reaches the API, with the illegible flag set', async () => {
     stubLlm.queueTranscript('fever x3d\ntook [illegible] yesterday')
 
-    const form = new FormData()
-    form.append(
-      'image',
-      new File(
-        [new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70])],
-        'n.jpg',
-        {
-          type: 'image/jpeg',
-        },
-      ),
-    )
+    const form = imageForm(fakeJpeg(), 'n.jpg')
     const res = await (await import('../app.ts')).app.handle(
       new Request('http://localhost/transcribe', { method: 'POST', body: form }),
     )
@@ -157,17 +138,7 @@ describe('transcription flows through the seam', () => {
   test('a clean transcript reports no illegible markers', async () => {
     stubLlm.queueTranscript('fever x3d, mild cough')
 
-    const form = new FormData()
-    form.append(
-      'image',
-      new File(
-        [new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70])],
-        'n.jpg',
-        {
-          type: 'image/jpeg',
-        },
-      ),
-    )
+    const form = imageForm(fakeJpeg(), 'n.jpg')
     const res = await (await import('../app.ts')).app.handle(
       new Request('http://localhost/transcribe', { method: 'POST', body: form }),
     )
