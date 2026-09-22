@@ -19,7 +19,7 @@
  *
  * All names and details are invented. No real patient data. (§5.9)
  */
-import type { StructuredNote } from '@emr/shared'
+import { CLINIC_TIMEZONE, type StructuredNote } from '@emr/shared'
 import { db, sql } from './client.ts'
 import {
   aiGenerations,
@@ -30,23 +30,56 @@ import {
 } from './schema.ts'
 
 /**
- * Local-time date at a given hour/minute today, offset by whole days.
+ * An instant at a given hour/minute of a CLINIC-LOCAL day.
  *
- * Times are interpreted in the SERVER's local zone, which is what a clinic
- * means by "09:00". Stored as timestamptz, so the instant is unambiguous.
+ * Deliberately not `new Date().setHours(...)`. That interprets the time in
+ * the process's ambient timezone, and the ambient timezone is not stable:
+ * `bun run` inherits the system zone (IST here) while `bun test` runs in UTC.
+ * The same seed would then write 09:00 IST or 09:00 UTC depending on how it
+ * was invoked -- a five-and-a-half hour difference, enough to put the whole
+ * clinic day on the wrong date and leave the dashboard empty.
  *
- * Note for A6: `scheduled_at::date = current_date` evaluates in the database
- * session's timezone, not the clinic's. The seeded clinic hours (09:00-12:30
- * IST = 03:30-07:00 UTC) sit inside a single UTC day so the naive filter
- * happens to work -- but an appointment after 18:30 IST would land on the
- * next UTC date and vanish from "today". The appointments query must filter
- * on an explicit zone, not on the session default.
+ * So: compute "today" in the clinic's zone, then build the instant from that
+ * zone's UTC offset. No ambient state involved.
  */
 function at(hour: number, minute: number, dayOffset = 0): Date {
-  const d = new Date()
-  d.setDate(d.getDate() + dayOffset)
-  d.setHours(hour, minute, 0, 0)
-  return d
+  const now = new Date()
+
+  // Today's calendar date as the clinic sees it.
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: CLINIC_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now)
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value)
+
+  const day = new Date(Date.UTC(get('year'), get('month') - 1, get('day')))
+  day.setUTCDate(day.getUTCDate() + dayOffset)
+
+  // Naive wall-clock instant, then corrected by the zone's offset on that day
+  // (which handles any future DST change without special-casing).
+  const naive = new Date(
+    Date.UTC(
+      day.getUTCFullYear(),
+      day.getUTCMonth(),
+      day.getUTCDate(),
+      hour,
+      minute,
+      0,
+      0,
+    ),
+  )
+  return new Date(naive.getTime() - clinicOffsetMs(naive))
+}
+
+/** The clinic zone's UTC offset, in milliseconds, at a given instant. */
+function clinicOffsetMs(instant: Date): number {
+  const asUtc = new Date(instant.toLocaleString('en-US', { timeZone: 'UTC' }))
+  const asClinic = new Date(
+    instant.toLocaleString('en-US', { timeZone: CLINIC_TIMEZONE }),
+  )
+  return asClinic.getTime() - asUtc.getTime()
 }
 
 // --- Patients --------------------------------------------------------------

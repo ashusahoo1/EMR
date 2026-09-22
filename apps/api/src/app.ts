@@ -11,6 +11,7 @@ import { cors } from '@elysiajs/cors'
 import { swagger } from '@elysiajs/swagger'
 import { Elysia } from 'elysia'
 import { handleError } from './error-handler.ts'
+import { readRoutes } from './routes/read.ts'
 
 export const app = new Elysia()
   .use(
@@ -35,5 +36,6 @@ export const app = new Elysia()
   /** One envelope for every failure -- see error-handler.ts. */
   .onError(handleError)
   .get('/health', () => ({ ok: true as const }))
+  .use(readRoutes)
 
 export type App = typeof app

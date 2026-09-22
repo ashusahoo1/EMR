@@ -11,9 +11,11 @@ import { Value } from '@sinclair/typebox/value'
 import { ALLOWED_APPOINTMENT_TRANSITIONS, AppointmentStatus } from './enums.ts'
 import {
   emptyStructuredNote,
+  GROUNDED_FIELDS,
   type StructuredNote as Note,
   StructuredNote,
 } from './schema.ts'
+import { FlagSeverity, VerificationCheck, VerificationFlag } from './verification.ts'
 
 const n01: Note = {
   chiefComplaint: { text: 'Fever', sourceSpan: 'fever since 3 days' },
@@ -70,6 +72,38 @@ describe('StructuredNote', () => {
   test('missingInformation carries no sourceSpan -- plain strings only', () => {
     const sourced = { ...n01, missingInformation: [{ text: 'x', sourceSpan: 'y' }] }
     expect(Value.Check(StructuredNote, sourced)).toBe(false)
+  })
+})
+
+describe('VerificationFlag literals stay in step with their sources', () => {
+  // The schema spells these out by hand -- a union built from
+  // `Object.values(...).map(t.Literal)` breaks Elysia's route inference (see
+  // the note in verification.ts). These tests are what stop the two copies
+  // drifting apart.
+  const literalsOf = (schema: { anyOf?: Array<{ const?: unknown }> }) =>
+    (schema.anyOf ?? [])
+      .map((member) => member.const)
+      .filter((value): value is string => typeof value === 'string')
+
+  test('field covers every grounded field plus missingInformation', () => {
+    const declared = literalsOf(
+      VerificationFlag.properties.field as { anyOf?: Array<{ const?: unknown }> },
+    )
+    expect(declared).toEqual([...GROUNDED_FIELDS, 'missingInformation'])
+  })
+
+  test('check covers every VerificationCheck', () => {
+    const declared = literalsOf(
+      VerificationFlag.properties.check as { anyOf?: Array<{ const?: unknown }> },
+    )
+    expect(declared.sort()).toEqual(Object.values(VerificationCheck).sort())
+  })
+
+  test('severity covers every FlagSeverity', () => {
+    const declared = literalsOf(
+      VerificationFlag.properties.severity as { anyOf?: Array<{ const?: unknown }> },
+    )
+    expect(declared.sort()).toEqual(Object.values(FlagSeverity).sort())
   })
 })
 

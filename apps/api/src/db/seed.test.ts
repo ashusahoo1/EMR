@@ -7,6 +7,7 @@
  * empty on first launch.
  */
 import { describe, expect, test } from 'bun:test'
+import { CLINIC_TIMEZONE } from '@emr/shared'
 import { sql as dsql, eq } from 'drizzle-orm'
 import { db } from './client.ts'
 import { appointments, consultations, doctors, patients } from './schema.ts'
@@ -21,12 +22,20 @@ function must<T>(value: T | undefined, what: string): T {
   return value
 }
 
-/** Appointments whose local calendar date is today. */
+/**
+ * Appointments whose calendar date is today IN THE CLINIC'S ZONE.
+ *
+ * Not `scheduled_at::date = current_date`: that evaluates in the session
+ * timezone (UTC here), so between midnight and 05:30 IST it answers a
+ * question about yesterday and returns nothing.
+ */
+const TODAY_IN_CLINIC_TZ = dsql`(${appointments.scheduledAt} AT TIME ZONE ${CLINIC_TIMEZONE})::date = (now() AT TIME ZONE ${CLINIC_TIMEZONE})::date`
+
 async function todaysAppointmentCount(): Promise<number> {
   const rows = await db
     .select({ n: dsql<number>`count(*)::int` })
     .from(appointments)
-    .where(dsql`${appointments.scheduledAt}::date = current_date`)
+    .where(TODAY_IN_CLINIC_TZ)
   return rows[0]?.n ?? 0
 }
 
@@ -54,7 +63,7 @@ describe('seed', () => {
     const rows = await db
       .select({ status: appointments.status, n: dsql<number>`count(*)::int` })
       .from(appointments)
-      .where(dsql`${appointments.scheduledAt}::date = current_date`)
+      .where(TODAY_IN_CLINIC_TZ)
       .groupBy(appointments.status)
 
     const byStatus = Object.fromEntries(rows.map((r) => [r.status, r.n]))

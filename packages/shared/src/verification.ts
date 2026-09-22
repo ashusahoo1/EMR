@@ -11,7 +11,7 @@
  * and explainable to a doctor: "this line does not appear in your notes."
  */
 import { type Static, Type as t } from '@sinclair/typebox'
-import { GROUNDED_FIELDS, StructuredNote } from './schema.ts'
+import { StructuredNote } from './schema.ts'
 
 /** Which check raised a flag. */
 export const VerificationCheck = {
@@ -49,16 +49,36 @@ export type FlagSeverity = (typeof FlagSeverity)[keyof typeof FlagSeverity]
 
 export const VerificationFlag = t.Object(
   {
-    /** Which field the flag attaches to; null for whole-note flags. */
+    /**
+     * Which field the flag attaches to; null for whole-note flags.
+     *
+     * Written as explicit literals rather than `GROUNDED_FIELDS.map(...)`.
+     * A union built from a mapped array is a `TUnion<TLiteral<string>[]>`,
+     * whose members TypeScript cannot enumerate statically -- and nesting
+     * that inside another union (here, `VerificationResult | null` in a
+     * route response) exceeds Elysia's handler inference and produces an
+     * unreadable "not assignable to Response" error. The literals below are
+     * kept in step with GROUNDED_FIELDS by a test in schema.test.ts.
+     */
     field: t.Union([
-      ...GROUNDED_FIELDS.map((f) => t.Literal(f)),
+      t.Literal('chiefComplaint'),
+      t.Literal('symptoms'),
+      t.Literal('relevantHistory'),
+      t.Literal('medicationsMentioned'),
+      t.Literal('doctorPlan'),
       t.Literal('missingInformation'),
       t.Null(),
     ]),
     /** Index within an array field; null for chiefComplaint or whole-note. */
     index: t.Union([t.Integer({ minimum: 0 }), t.Null()]),
-    check: t.Union(Object.values(VerificationCheck).map((c) => t.Literal(c))),
-    severity: t.Union(Object.values(FlagSeverity).map((s) => t.Literal(s))),
+    check: t.Union([
+      t.Literal('schema'),
+      t.Literal('grounding'),
+      t.Literal('numeric'),
+      t.Literal('negation'),
+      t.Literal('survival'),
+    ]),
+    severity: t.Union([t.Literal('hard'), t.Literal('repairable'), t.Literal('soft')]),
     /**
      * Doctor-readable, and shown verbatim in the UI. Write these as a
      * sentence a clinician would understand -- "'BP 130/80' does not appear

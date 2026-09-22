@@ -32,6 +32,17 @@ export const LIMITS = {
 } as const
 
 /**
+ * The clinic's timezone. "Today" means today HERE, not in UTC.
+ *
+ * The database session runs in UTC, so `scheduled_at::date = current_date`
+ * silently answers a different question: an appointment at 19:00 IST is
+ * 13:30 UTC on the same day, but one at 06:00 IST is 00:30 UTC on the same
+ * day only by luck, and anything after 18:30 IST rolls into the next UTC
+ * date. Every date filter must name this zone explicitly.
+ */
+export const CLINIC_TIMEZONE = 'Asia/Kolkata'
+
+/**
  * Prompt versions, written to every ai_generations row.
  *
  * §4.8: without the model name and prompt version the audit trail is
