@@ -2,13 +2,23 @@
   "name": "emr-workspace",
   "private": true,
   "type": "module",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev:api": "bun --filter @emr/api dev",
     "dev:web": "bun --filter @emr/web dev",
     "test": "bun test",
     "test:eval": "bun test --test-name-pattern eval",
     "lint": "biome check .",
-    "format": "biome format --write ."
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "bun run scripts/typecheck.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "@types/bun": "^1.4.2",
+    "typescript": "^7.0.2"
   }
 }

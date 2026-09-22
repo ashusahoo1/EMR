@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    // --- Strictness (ground rule 6: no `any`) ---------------------------
+    "strict": true,
+    // B4's verification layer indexes into span arrays constantly. This is
+    // what stops a silent `undefined` becoming a false "grounded" verdict.
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": true,
+
+    // --- Module resolution ----------------------------------------------
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    // Imports that only carry types must say `import type` — Biome's
+    // useImportType enforces the same rule from the lint side.
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+
+    // --- Emit -------------------------------------------------------------
+    // Bun executes TypeScript directly and Next runs its own pipeline;
+    // tsc is a type checker here, never a build step.
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  }
+}
