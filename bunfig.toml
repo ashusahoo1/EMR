@@ -1,0 +1,6 @@
+# `bun test` runs from the repo root, but the API's configuration lives in
+# apps/api/.env, and Bun only auto-loads .env from the current working
+# directory. Without this preload, every test that touches the database fails
+# with "DATABASE_URL is not set" -- and it would fail the same way in CI (D3).
+[test]
+preload = ["./scripts/test-setup.ts"]
