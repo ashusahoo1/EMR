@@ -261,3 +261,33 @@ describe('the seam keeps the vendor out', () => {
     expect(isLlmError(null)).toBe(false)
   })
 })
+
+describe('B2 — runaway output is rejected (E36)', () => {
+  test('a transcript wildly longer than any note could be fails', async () => {
+    const { assertTranscriptPlausible } = await import('./openai.ts')
+    const meta = {
+      model: 'm',
+      promptVersion: 'transcribe-v1',
+      latencyMs: 1,
+      inputTokens: 0,
+      outputTokens: 0,
+    }
+
+    // An OPD note is a few hundred characters. 30k means the model is
+    // generating, not reading (§4.3).
+    expect(() => assertTranscriptPlausible('x'.repeat(30_000), meta)).toThrow()
+  })
+
+  test('a realistic transcript passes through unchanged', async () => {
+    const { assertTranscriptPlausible } = await import('./openai.ts')
+    const meta = {
+      model: 'm',
+      promptVersion: 'transcribe-v1',
+      latencyMs: 1,
+      inputTokens: 0,
+      outputTokens: 0,
+    }
+    const note = 'C/O fever x3d, mild cough\nno breathlessness\nRx Tab PCM 650 BD x3d'
+    expect(assertTranscriptPlausible(note, meta)).toBe(note)
+  })
+})

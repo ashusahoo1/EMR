@@ -14,6 +14,13 @@ import { LIMITS, PROMPT_VERSION } from '@emr/shared'
 import OpenAI from 'openai'
 import { log } from '../log.ts'
 import {
+  countIllegible,
+  isRefusal,
+  TRANSCRIBE_SYSTEM_PROMPT,
+  TRANSCRIBE_TEMPERATURE,
+  TRANSCRIBE_USER_PROMPT,
+} from './prompts/transcribe.ts'
+import {
   type CallMeta,
   type LlmClient,
   LlmError,
@@ -63,18 +70,86 @@ export class OpenAiClient implements LlmClient {
   }
 
   /**
-   * Stage 1 -- transcription (§4.3).
+   * Stage 1 -- transcription (§4.3, B2).
    *
-   * The prompt arrives at B2. Until then this throws rather than sending a
-   * half-specified instruction to a model: a placeholder prompt would produce
-   * plausible-looking output that silently violates the [illegible] rule,
-   * which is exactly the failure mode the rule exists to prevent.
+   * Image in, verbatim text out. No structuring, no interpretation: those
+   * belong to stage 3, after the doctor has corrected any misreads (§4.1).
    */
-  async transcribeImage(_input: TranscribeInput): Promise<TranscribeOutput> {
-    throw new LlmError(
-      LlmFailure.Unavailable,
-      'Transcription prompt not yet implemented (lands at B2).',
-    )
+  async transcribeImage(input: TranscribeInput): Promise<TranscribeOutput> {
+    const startedAt = Date.now()
+    const promptVersion = PROMPT_VERSION.transcription
+
+    let response: Awaited<ReturnType<OpenAI['chat']['completions']['create']>>
+    try {
+      response = await this.client.chat.completions.create({
+        model: this.visionModel,
+        temperature: TRANSCRIBE_TEMPERATURE,
+        messages: [
+          { role: 'system', content: TRANSCRIBE_SYSTEM_PROMPT },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: TRANSCRIBE_USER_PROMPT },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:${input.mimeType};base64,${toBase64(input.image)}`,
+                  // "high" costs more tokens but reads small handwriting;
+                  // "low" downsamples to 512px, which is where a VLM starts
+                  // guessing at exactly the words we most need read right.
+                  detail: 'high',
+                },
+              },
+            ],
+          },
+        ],
+      })
+    } catch (error) {
+      throw new LlmError(classifyOpenAiError(error), 'Transcription call failed.', {
+        meta: { model: this.visionModel, promptVersion },
+        cause: error,
+      })
+    }
+
+    const meta = buildMeta({
+      model: this.visionModel,
+      promptVersion,
+      startedAt,
+      usage: response.usage,
+    })
+
+    const text = response.choices[0]?.message?.content?.trim() ?? ''
+
+    if (text.length === 0) {
+      throw new LlmError(LlmFailure.BadOutput, 'The model returned no text.', { meta })
+    }
+
+    // E34/E18 -- a refusal is not a technical error, and the doctor should be
+    // told which it was.
+    if (isRefusal(text)) {
+      log.info('transcription refused: not clinical notes', { model: meta.model })
+      throw new LlmError(
+        LlmFailure.Refused,
+        'That image does not look like handwritten clinical notes.',
+        { meta },
+      )
+    }
+
+    // E36 -- output wildly disproportionate to the image means the model is
+    // generating rather than reading.
+    assertTranscriptPlausible(text, meta)
+
+    log.info('transcription complete', {
+      model: meta.model,
+      promptVersion,
+      latencyMs: meta.latencyMs,
+      chars: text.length,
+      illegibleMarkers: countIllegible(text),
+      inputTokens: meta.inputTokens,
+      outputTokens: meta.outputTokens,
+    })
+
+    return { text, meta }
   }
 
   /**
@@ -130,7 +205,9 @@ export function buildMeta(input: {
   model: string
   promptVersion: string
   startedAt: number
-  usage?: { prompt_tokens?: number; completion_tokens?: number } | null
+  // `undefined` and `null` both mean "the provider did not report usage",
+  // and the SDK uses undefined while our own stubs use null.
+  usage?: { prompt_tokens?: number; completion_tokens?: number } | null | undefined
 }): CallMeta {
   return {
     model: input.model,
@@ -161,6 +238,22 @@ export function assertTranscriptPlausible(text: string, meta: CallMeta): string 
     )
   }
   return text
+}
+
+/**
+ * Base64-encode image bytes for a data URL.
+ *
+ * Chunked rather than `String.fromCharCode(...bytes)`, which blows the
+ * argument limit and throws a RangeError on anything over a few hundred KB --
+ * i.e. on every real phone photo.
+ */
+function toBase64(bytes: Uint8Array): string {
+  const CHUNK = 0x8000
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+  }
+  return btoa(binary)
 }
 
 /** Prompt versions live in shared so the audit trail and the code agree. */
