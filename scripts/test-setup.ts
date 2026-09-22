@@ -12,6 +12,10 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
+// Tests provoke 500s on purpose to prove nothing leaks; their stack traces
+// would bury real failures. log.ts reads this to stay quiet.
+process.env.NODE_ENV ??= 'test'
+
 const envPath = join(import.meta.dir, '..', 'apps', 'api', '.env')
 
 if (existsSync(envPath)) {
@@ -27,6 +31,11 @@ if (existsSync(envPath)) {
 
     const key = line.slice(0, eq).trim()
     const value = line.slice(eq + 1).trim()
+
+    // LOG_LEVEL is a developer convenience for the running server. Copying it
+    // into tests would un-silence the deliberate 500s above.
+    if (key === 'LOG_LEVEL') continue
+
     if (key && process.env[key] === undefined) {
       process.env[key] = value
     }
