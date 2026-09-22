@@ -44,11 +44,23 @@ export const aiRoutes = new Elysia()
    * The image is never persisted (§2.3) -- processed in memory, only the
    * transcript is stored.
    */
-  .post('/transcribe', async ({ body }) => await transcribeImage(body.image), {
-    body: TranscribeBody,
-    response: TranscribeResponse,
-    detail: {
-      summary: 'Transcribe handwritten notes from an image',
-      tags: ['ai'],
+  .post(
+    '/transcribe',
+    async ({ body }) =>
+      await transcribeImage({
+        type: body.image.type,
+        size: body.image.size,
+        // Read into memory and never written to disk (§2.3): persisting the
+        // image would mean object storage, a lifecycle policy and a much
+        // larger data-protection footprint. Only the transcript is stored.
+        bytes: new Uint8Array(await body.image.arrayBuffer()),
+      }),
+    {
+      body: TranscribeBody,
+      response: TranscribeResponse,
+      detail: {
+        summary: 'Transcribe handwritten notes from an image',
+        tags: ['ai'],
+      },
     },
-  })
+  )

@@ -1,79 +1,88 @@
 /**
- * AI endpoints -- STUBBED (BUILD_ROADMAP A8).
+ * AI services -- now routed through the llm/ seam (B0).
  *
- * These implement the real contract from Appendix 1 and return canned data.
- * Sector C can therefore be built against a stable API while Sector B is
- * still being written, and the frontend never has to be revisited when the
- * real pipeline lands at B6.
+ * The A8 version returned a hardcoded fixture. This version calls
+ * `LlmClient`, so in tests the stub answers and in production the real
+ * provider does, with no branching in this file.
  *
- * What is deliberately NOT here yet:
- *   - any model call (B0's llm/ seam)
- *   - stage 0 image precheck (B1)
- *   - stage 4 verification (B4)
- *   - ai_generations audit rows (B6)
+ * Still to come:
+ *   B1 -- stage 0 image precheck
+ *   B2/B3 -- the actual prompts behind the seam
+ *   B4 -- verification replacing the hardcoded `passed`
+ *   B6 -- ai_generations audit rows and the one permitted retry
  *
- * What IS here and is not a stub: the LLM_ENABLED gate. That is the E23
- * graceful-degradation path, and wiring it now means the degradation story
- * is exercised from day one rather than bolted on at B7.
+ * What is already real: the LLM_ENABLED gate (E23), the empty-notes
+ * rejection (E1), persisting as aiNote and never confirmedNote (§4.7), and
+ * the failure taxonomy mapping from LlmFailure to error codes.
  */
 import {
   emptyStructuredNote,
+  ILLEGIBLE_MARKER,
   type StructuredNote,
+  StructuredNote as StructuredNoteSchema,
   type VerificationResult,
 } from '@emr/shared'
+import { Value } from '@sinclair/typebox/value'
 import { AppError, ErrorCode } from '../errors.ts'
+import { getLlmClient } from '../llm/index.ts'
+import { isLlmError, LlmFailure } from '../llm/types.ts'
 import { log } from '../log.ts'
 import { getConsultation, updateConsultation } from './consultations.ts'
 
 /**
  * Whether AI assistance is available.
  *
- * Read per-call rather than captured at import, so a test can flip it
- * without re-importing the module. Anything other than an explicit "false"
- * means enabled -- an unset variable should not silently disable the feature.
+ * Kept as a named export because the routes and tests both ask this
+ * question; the client resolution itself lives in llm/index.ts.
  */
 export function isLlmEnabled(): boolean {
   return process.env.LLM_ENABLED !== 'false'
 }
 
 /**
- * Guard every AI entry point.
+ * Resolve the client, or refuse with the message a doctor should see.
  *
- * The message matters as much as the status: a doctor seeing this must
- * understand they can carry on working, not that the app is broken. The
- * wording lives in errors.ts and is asserted by a test.
+ * The wording matters as much as the status: someone reading this must
+ * understand they can carry on working, not that the app is broken (E23).
  */
-function assertLlmAvailable(): void {
-  if (!isLlmEnabled()) {
-    log.warn('ai request refused: LLM_ENABLED=false')
+function requireLlm() {
+  const client = getLlmClient()
+  if (!client) {
+    log.warn('ai request refused: no llm client available')
     throw new AppError(ErrorCode.AI_UNAVAILABLE)
   }
+  return client
 }
 
-/** The N01 golden-set note, exactly as SYNTHETIC_NOTES_TEST.md specifies. */
-function n01Fixture(): StructuredNote {
-  return {
-    chiefComplaint: { text: 'Fever', sourceSpan: 'fever since 3 days' },
-    symptoms: [
-      { text: 'Fever for 3 days', sourceSpan: 'fever since 3 days' },
-      { text: 'Mild cough', sourceSpan: 'mild cough' },
-      { text: 'No breathing difficulty', sourceSpan: 'no breathing difficulty' },
-    ],
-    relevantHistory: [
-      { text: 'Penicillin allergy', sourceSpan: 'allergic to penicillin' },
-    ],
-    medicationsMentioned: [
-      { text: 'Paracetamol', sourceSpan: 'took paracetamol yesterday' },
-    ],
-    doctorPlan: [
-      { text: 'Hydration', sourceSpan: 'advised hydration' },
-      { text: 'Rest', sourceSpan: 'rest' },
-      { text: 'Return if symptoms worsen', sourceSpan: 'return if symptoms worsen' },
-    ],
-    missingInformation: ['Temperature was not recorded'],
+/**
+ * Map a provider failure to the API's error contract (Appendix 3).
+ *
+ * Each of these reaches the doctor as a different message, which is the
+ * whole point: "too many requests, wait a moment" and "we could not read
+ * that" are different problems with different remedies (E18, E21, E22).
+ */
+function translateLlmError(error: unknown): AppError {
+  if (!isLlmError(error)) {
+    return new AppError(ErrorCode.AI_GENERATION_FAILED)
+  }
+
+  switch (error.failure) {
+    case LlmFailure.Timeout:
+      return new AppError(ErrorCode.AI_TIMEOUT)
+    case LlmFailure.RateLimited:
+      return new AppError(ErrorCode.RATE_LIMITED)
+    case LlmFailure.Unavailable:
+      return new AppError(ErrorCode.AI_UNAVAILABLE)
+    case LlmFailure.Refused:
+      return new AppError(ErrorCode.NOT_CLINICAL_NOTES)
+    case LlmFailure.BadOutput:
+      return new AppError(ErrorCode.AI_GENERATION_FAILED)
+    default:
+      return new AppError(ErrorCode.AI_GENERATION_FAILED)
   }
 }
 
+/** Verification is hardcoded until B4 lands. */
 const PASSED: VerificationResult = { status: 'passed', flags: [], repaired: false }
 
 export interface StructureResult {
@@ -84,18 +93,15 @@ export interface StructureResult {
 /**
  * Stage 3 -- structure the stored notes (F5).
  *
- * STUB: returns the N01 fixture regardless of input. B6 replaces the body
- * with the real pipeline; the signature and the error contract stay.
- *
- * The input validation below is NOT stubbed. E1 (empty notes) and E3 (over
- * the cap) are real rules enforced server-side, and the frontend relies on
- * them, so they behave correctly now.
+ * Note the shape of the failure path: `raw` comes back as `unknown` from the
+ * seam and is validated here before it can touch the database. The
+ * provider's constrained decoding guarantees shape, not truth (§4.5), so
+ * "the SDK said it was JSON" is not a reason to skip validation.
  */
 export async function structureConsultation(
   consultationId: string,
 ): Promise<StructureResult> {
-  assertLlmAvailable()
-
+  const client = requireLlm()
   const consultation = await getConsultation(consultationId)
 
   // E1 -- whitespace-only notes are nothing to structure. Rejecting here
@@ -104,16 +110,47 @@ export async function structureConsultation(
     throw new AppError(ErrorCode.NOTES_EMPTY)
   }
 
-  const note = n01Fixture()
+  let raw: unknown
+  let model: string
+  let promptVersion: string
+  let latencyMs: number
+
+  try {
+    const result = await client.structureNotes({ notes: consultation.rawNotes })
+    raw = result.raw
+    model = result.meta.model
+    promptVersion = result.meta.promptVersion
+    latencyMs = result.meta.latencyMs
+  } catch (error) {
+    log.error('structuring call failed', {
+      consultationId,
+      failure: isLlmError(error) ? error.failure : 'unknown',
+    })
+    throw translateLlmError(error)
+  }
+
+  // Schema validation. B4 adds the grounding, numeric, negation and survival
+  // checks on top of this; B6 adds the one permitted retry when they fail.
+  if (!Value.Check(StructuredNoteSchema, raw)) {
+    log.error('structuring returned schema-invalid output', {
+      consultationId,
+      model,
+      promptVersion,
+    })
+    throw new AppError(ErrorCode.AI_GENERATION_FAILED)
+  }
+  const note = raw as StructuredNote
 
   // Persist as aiNote, never as confirmedNote: AI output is never saved as
   // final by default (§4.7). Nothing is clinical until the doctor confirms.
   await updateConsultation(consultationId, { aiNote: note })
 
-  log.info('structure (stubbed)', {
+  log.info('structured', {
     consultationId,
     notesLength: consultation.rawNotes.length,
-    stub: true,
+    model,
+    promptVersion,
+    latencyMs,
   })
 
   return { note, verification: PASSED }
@@ -127,41 +164,55 @@ export interface TranscribeResult {
 /**
  * Stage 1 -- transcribe a photograph of handwritten notes (F8).
  *
- * STUB: returns fixed text. B1 adds the precheck, B2 the real VLM call.
+ * Returns text only, and deliberately does NOT chain into structuring:
+ * stage 2's human checkpoint is the entire product thesis (§4.4). The doctor
+ * reads the transcript, corrects any misreads, and presses Generate.
  *
- * Two contract details that are real even in the stub:
- *   - the returned text lands in the doctor's editable textarea, it is never
- *     auto-structured (§4.4 -- stage 2's human checkpoint is the product)
- *   - hasIllegible tells the frontend to highlight [illegible] markers so
- *     the doctor's eye goes straight to them
+ * The image is never persisted (§2.3) -- processed in memory, only the
+ * transcript is stored.
  */
 export async function transcribeImage(file: {
   type: string
   size: number
+  bytes: Uint8Array
 }): Promise<TranscribeResult> {
-  assertLlmAvailable()
+  const client = requireLlm()
 
-  // A minimal type check even in the stub: the frontend needs to see a real
-  // rejection path exist. The full precheck arrives at B1.
+  // Full stage 0 precheck arrives at B1; this is the minimal guard so the
+  // rejection path exists for the frontend today.
   if (!file.type.startsWith('image/')) {
     throw new AppError(ErrorCode.INVALID_IMAGE_TYPE, {
       details: { received: file.type },
     })
   }
 
-  const text = [
-    'fever since 3 days, mild cough',
-    'no breathing difficulty',
-    'took paracetamol yesterday',
-    'allergic to penicillin',
-    'advised hydration, rest',
-    'return if symptoms worsen',
-  ].join('\n')
+  try {
+    const result = await client.transcribeImage({
+      image: file.bytes,
+      mimeType: file.type,
+    })
 
-  log.info('transcribe (stubbed)', { bytes: file.size, stub: true })
+    log.info('transcribed', {
+      bytes: file.size,
+      chars: result.text.length,
+      model: result.meta.model,
+      promptVersion: result.meta.promptVersion,
+      latencyMs: result.meta.latencyMs,
+    })
 
-  return { text, hasIllegible: text.includes('[illegible]') }
+    return {
+      text: result.text,
+      // Tells the frontend to highlight the markers so the doctor's eye goes
+      // straight to them (§4.4).
+      hasIllegible: result.text.includes(ILLEGIBLE_MARKER),
+    }
+  } catch (error) {
+    log.error('transcription call failed', {
+      bytes: file.size,
+      failure: isLlmError(error) ? error.failure : 'unknown',
+    })
+    throw translateLlmError(error)
+  }
 }
 
-/** Exported for tests that need a known-good note without calling the API. */
-export { emptyStructuredNote, n01Fixture }
+export { emptyStructuredNote }
