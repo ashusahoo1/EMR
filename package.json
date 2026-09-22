@@ -1,0 +1,14 @@
+{
+  "name": "emr-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:api": "bun --filter @emr/api dev",
+    "dev:web": "bun --filter @emr/web dev",
+    "test": "bun test",
+    "test:eval": "bun test --test-name-pattern eval",
+    "lint": "biome check .",
+    "format": "biome format --write ."
+  }
+}

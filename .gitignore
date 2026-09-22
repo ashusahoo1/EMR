@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+.bun/
+
+# secrets — never commit (ground rule 5)
+.env
+.env.*
+!.env.example
+
+# build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# golden set — hand-written notes and photographs, never committed (EMR_PLAN §5.9)
+notes/
+
+# logs
+*.log
+npm-debug.log*
+bun-debug.log*
+
+# editor / OS
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# test / coverage
+coverage/
