@@ -1035,10 +1035,17 @@ Index: `ai_generations(consultation_id, created_at)`.
 
 # Appendix 4 — Environment variables
 
+> **Amended during the build:** the API listens on **4000**, not 3001, and
+> local Postgres is on **15432**, not 5432. Both ports were already taken on
+> the development machine — 3001 by a Docker/WSL relay serving an unrelated
+> Next.js app, 5432/5433/5435 by other Postgres instances. The 3001 collision
+> is the nastier one: Bun logs "listening" successfully while the other
+> process keeps answering, so requests silently hit the wrong application.
+
 ### `apps/api/.env`
 ```
 DATABASE_URL=postgresql://...       # Neon pooled
-PORT=3001
+PORT=4000
 WEB_ORIGIN=http://localhost:3000
 OPENAI_API_KEY=sk-...               # server-side only, never exposed (E37)
 VISION_MODEL=                       # pin at B2

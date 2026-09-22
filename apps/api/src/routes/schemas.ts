@@ -108,6 +108,26 @@ export const AppointmentResponse = t.Object({
   }),
 })
 
+// --- AI routes -------------------------------------------------------------
+
+export const StructureResponse = t.Object({
+  note: StructuredNote,
+  verification: VerificationResult,
+})
+
+export const TranscribeBody = t.Object({
+  image: t.File({
+    // Enforced again server-side in the service; this is the cheap rejection.
+    maxSize: LIMITS.imageMaxBytes,
+    type: [...LIMITS.allowedImageTypes],
+  }),
+})
+
+export const TranscribeResponse = t.Object({
+  text: t.String(),
+  hasIllegible: t.Boolean(),
+})
+
 export const SearchResponse = t.Object({
   patients: t.Array(PatientSummary),
   consultations: t.Array(

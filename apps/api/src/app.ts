@@ -11,6 +11,7 @@ import { cors } from '@elysiajs/cors'
 import { swagger } from '@elysiajs/swagger'
 import { Elysia } from 'elysia'
 import { handleError } from './error-handler.ts'
+import { aiRoutes } from './routes/ai.ts'
 import { readRoutes } from './routes/read.ts'
 import { writeRoutes } from './routes/write.ts'
 
@@ -39,5 +40,6 @@ export const app = new Elysia()
   .get('/health', () => ({ ok: true as const }))
   .use(readRoutes)
   .use(writeRoutes)
+  .use(aiRoutes)
 
 export type App = typeof app

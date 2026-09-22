@@ -77,6 +77,21 @@ export function handleError({
     })
   }
 
+  /**
+   * Elysia's own file-type guard, raised by `t.File({ type })` before the
+   * handler runs. It sniffs magic bytes rather than trusting the declared
+   * MIME type, so a .txt renamed .jpg is caught here (E32).
+   *
+   * Without this branch it falls through to INTERNAL_ERROR, turning a
+   * legitimate 422 into a 500 -- which is how a clear "wrong file type"
+   * message becomes "something went wrong on our end".
+   */
+  if (code === 'INVALID_FILE_TYPE') {
+    set.status = 422
+    log.warn('invalid file type', { method: request.method, path })
+    return errorEnvelope(ErrorCode.INVALID_IMAGE_TYPE)
+  }
+
   set.status = 500
   log.error('unhandled error', {
     elysiaCode: code,
