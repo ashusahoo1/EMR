@@ -16,44 +16,84 @@
 import { CLINIC_TIMEZONE } from '@emr/shared'
 
 /**
- * Formatters are expensive to construct and are reused on every row, so they
- * are built once. `Intl` instances are immutable and safe to share.
+ * THE SECOND HALF OF THE TIMEZONE PROBLEM, found by a hydration error.
+ *
+ * Naming the timezone (above) fixes WHICH INSTANT is shown. It does not fix
+ * HOW it is written -- and that turns out to vary too:
+ *
+ *   Bun  (ICU 78.3): "Wednesday, 23 September 2026"
+ *   Node (ICU 75.1): "Wednesday 23 September, 2026"
+ *
+ * Same locale, same options, different comma placement, because `en-IN`'s
+ * pattern for this field combination changed between ICU releases. Next
+ * renders the page on Node and hydrates it on Bun-built client code, so
+ * React compared the two strings and reported a hydration mismatch.
+ *
+ * The VALUES are identical across runtimes -- only the arrangement differs.
+ * So these formatters ask `Intl` for the parts and assemble the sentence
+ * themselves. That keeps the locale-aware month and weekday names, the
+ * timezone conversion and the numbering system, while making the output a
+ * fixed function of the date rather than of whichever ICU happens to be
+ * loaded.
+ *
+ * Applied to all three, not just the one that broke: `formatTime` and
+ * `formatDateShort` agree on today's ICU versions, but that is luck rather
+ * than a guarantee, and a hydration error is a poor way to find out it ran
+ * out.
  */
-const TIME = new Intl.DateTimeFormat('en-IN', {
-  timeZone: CLINIC_TIMEZONE,
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: true,
-})
+const PARTS = {
+  time: new Intl.DateTimeFormat('en-IN', {
+    timeZone: CLINIC_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }),
+  long: new Intl.DateTimeFormat('en-IN', {
+    timeZone: CLINIC_TIMEZONE,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }),
+  short: new Intl.DateTimeFormat('en-IN', {
+    timeZone: CLINIC_TIMEZONE,
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }),
+} as const
 
-const DATE_LONG = new Intl.DateTimeFormat('en-IN', {
-  timeZone: CLINIC_TIMEZONE,
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-})
+/** Pull the named parts out of a format, ignoring the locale's literals. */
+function partsOf(formatter: Intl.DateTimeFormat, date: Date): Record<string, string> {
+  const found: Record<string, string> = {}
+  for (const part of formatter.formatToParts(date)) {
+    if (part.type !== 'literal') found[part.type] = part.value
+  }
+  return found
+}
 
-const DATE_SHORT = new Intl.DateTimeFormat('en-IN', {
-  timeZone: CLINIC_TIMEZONE,
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-})
+function toDate(input: string | Date): Date {
+  return typeof input === 'string' ? new Date(input) : input
+}
 
 /** "09:00 am", in clinic time. */
 export function formatTime(iso: string): string {
-  return TIME.format(new Date(iso))
+  const { hour, minute, dayPeriod } = partsOf(PARTS.time, new Date(iso))
+  // dayPeriod is "am"/"pm" here; lowercased so a runtime rendering it as
+  // "AM" cannot reintroduce the same class of mismatch.
+  return `${hour}:${minute} ${(dayPeriod ?? '').toLowerCase()}`.trim()
 }
 
-/** "Tuesday, 23 September 2026", in clinic time. */
+/** "Wednesday, 23 September 2026", in clinic time. */
 export function formatDateLong(iso: string | Date): string {
-  return DATE_LONG.format(typeof iso === 'string' ? new Date(iso) : iso)
+  const { weekday, day, month, year } = partsOf(PARTS.long, toDate(iso))
+  return `${weekday}, ${day} ${month} ${year}`
 }
 
 /** "23 Sep 2026", in clinic time. */
 export function formatDateShort(iso: string | Date): string {
-  return DATE_SHORT.format(typeof iso === 'string' ? new Date(iso) : iso)
+  const { day, month, year } = partsOf(PARTS.short, toDate(iso))
+  return `${day} ${month} ${year}`
 }
 
 /**
