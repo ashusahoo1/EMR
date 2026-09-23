@@ -18,7 +18,7 @@
 import { LIMITS } from '@emr/shared'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2Icon, SparklesIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { ImageUpload } from '@/components/consultation/image-upload'
 import { NotesEditor } from '@/components/consultation/notes-editor'
@@ -26,6 +26,7 @@ import {
   TranscriptNotice,
   TranscriptPreview,
 } from '@/components/consultation/transcript-notice'
+import { useUnsavedWork } from '@/components/consultation/unsaved-work-context'
 import { ErrorState } from '@/components/states/error-state'
 import { Button } from '@/components/ui/button'
 import { api, unwrap } from '@/lib/api'
@@ -42,6 +43,7 @@ export function ConsultationComposer({
 }) {
   const [notes, setNotes] = useState(initialNotes)
   const queryClient = useQueryClient()
+  const { setDirty } = useUnsavedWork()
 
   /**
    * The transcript exactly as the model produced it, or null.
@@ -88,6 +90,19 @@ export function ConsultationComposer({
       })
     },
   })
+
+  /**
+   * Report unsaved keystrokes to the navigation guard (C8, F16).
+   *
+   * `pending` means the debounce is still running, `saving` that the request
+   * is in flight, `error` that it failed. All three mean the server does not
+   * yet hold what is on screen. `idle` and `saved` mean it does.
+   */
+  useEffect(() => {
+    const unsaved = status === 'pending' || status === 'saving' || status === 'error'
+    setDirty('notes', unsaved)
+    return () => setDirty('notes', false)
+  }, [status, setDirty])
 
   const trimmed = notes.trim()
   const isEmpty = trimmed.length < LIMITS.notesMinChars // E1

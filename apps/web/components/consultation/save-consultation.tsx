@@ -24,6 +24,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckIcon, Loader2Icon } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { useUnsavedWork } from '@/components/consultation/unsaved-work-context'
 import { ErrorState } from '@/components/states/error-state'
 import { Button } from '@/components/ui/button'
 import { ApiError, api, unwrap } from '@/lib/api'
@@ -41,6 +42,7 @@ export function SaveConsultation({
 }) {
   const queryClient = useQueryClient()
   const router = useRouter()
+  const { setDirty } = useUnsavedWork()
 
   const save = useMutation({
     mutationFn: async () => {
@@ -75,6 +77,19 @@ export function SaveConsultation({
     },
 
     onSuccess: async () => {
+      /**
+       * Clear the guard BEFORE navigating (F16).
+       *
+       * The edits are now on the server, so they are no longer unsaved. The
+       * unmount cleanup would eventually do this, but "eventually" is after
+       * the transition has begun -- and a `beforeunload` firing in that
+       * window would ask the doctor to confirm discarding work that was
+       * successfully saved a moment earlier. Clearing here makes the flag
+       * honest at every instant rather than almost every instant.
+       */
+      setDirty('draft', false)
+      setDirty('notes', false)
+
       /**
        * "Visible immediately" is C7's done-when, and it is a cache problem
        * rather than a server one. The patient's history query already holds

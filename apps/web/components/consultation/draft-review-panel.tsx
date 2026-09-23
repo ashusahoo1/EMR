@@ -15,10 +15,11 @@
  */
 import type { StructuredNote, VerificationResult } from '@emr/shared'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { DraftReview } from '@/components/consultation/draft-review'
 import { SaveConsultation } from '@/components/consultation/save-consultation'
+import { useUnsavedWork } from '@/components/consultation/unsaved-work-context'
 import { ErrorState } from '@/components/states/error-state'
 import { api, unwrap } from '@/lib/api'
 
@@ -45,6 +46,7 @@ export function DraftReviewPanel({
   const [draftKey, setDraftKey] = useState(() => JSON.stringify(aiNote))
   const [note, setNote] = useState<StructuredNote>(aiNote)
   const [hasEdits, setHasEdits] = useState(false)
+  const { setDirty } = useUnsavedWork()
 
   const currentKey = JSON.stringify(aiNote)
   if (currentKey !== draftKey) {
@@ -55,6 +57,21 @@ export function DraftReviewPanel({
     setNote(aiNote)
     setHasEdits(false)
   }
+
+  /**
+   * Report unsaved edits to the page's navigation guard (C8, F16).
+   *
+   * An effect, not a render-phase call: updating a PARENT's state during
+   * render is a React error, and the provider lives above this component.
+   * The delay is one paint, which no human click can beat.
+   *
+   * Cleared on unmount, so leaving the page does not strand a dirty flag
+   * that would then guard an unrelated screen.
+   */
+  useEffect(() => {
+    setDirty('draft', hasEdits)
+    return () => setDirty('draft', false)
+  }, [hasEdits, setDirty])
 
   const queryClient = useQueryClient()
 
