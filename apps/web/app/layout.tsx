@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
+import { AppHeader } from '@/components/app-header'
+import { Toaster } from '@/components/ui/sonner'
 import { Providers } from './providers'
 import './globals.css'
 
@@ -25,7 +27,17 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">
-        <Providers>{children}</Providers>
+        <Providers>
+          <AppHeader />
+          {/* `flex-1` so short pages still push the viewport height. */}
+          <div className="flex-1">{children}</div>
+          {/*
+            Toasts confirm actions that leave no visible trace -- a saved
+            consultation navigates away, so without this the doctor has no
+            acknowledgement it worked. C7 uses it for exactly that.
+          */}
+          <Toaster position="bottom-right" />
+        </Providers>
       </body>
     </html>
   )
