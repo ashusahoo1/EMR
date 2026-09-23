@@ -10,6 +10,7 @@
  */
 import { StethoscopeIcon } from 'lucide-react'
 import Link from 'next/link'
+import { HeaderSearch } from '@/components/search/header-search'
 
 /** Matches the single seeded doctor (apps/api/src/db/seed.ts). */
 const DOCTOR_NAME = 'Dr. Anjali Verma'
@@ -27,11 +28,20 @@ export function AppHeader() {
           Consultation Workspace
         </Link>
 
-        <div className="text-right">
-          <p className="font-medium text-sm leading-tight">{DOCTOR_NAME}</p>
-          <p className="text-muted-foreground text-xs leading-tight">
-            {DOCTOR_SPECIALTY}
-          </p>
+        {/*
+          F17 -- search lives in the header so it is reachable from every
+          screen. A doctor looking up a patient mid-consultation should not
+          have to navigate away from the consultation to do it.
+        */}
+        <div className="ml-auto flex items-center gap-4">
+          <HeaderSearch />
+
+          <div className="hidden text-right sm:block">
+            <p className="font-medium text-sm leading-tight">{DOCTOR_NAME}</p>
+            <p className="text-muted-foreground text-xs leading-tight">
+              {DOCTOR_SPECIALTY}
+            </p>
+          </div>
         </div>
       </div>
     </header>
