@@ -1,89 +1,157 @@
 'use client'
 
 /**
- * A temporary home page that proves the wiring (BUILD_ROADMAP C0).
+ * F1 -- the appointments dashboard (BUILD_ROADMAP C2).
  *
- * C0's done-when is that a component calls `api.appointments.get()` and gets
- * real typed fields back. This is that component. It is deliberately plain:
- * C1 replaces it with the actual shell and C2 with the real dashboard, so
- * anything decorative here would be thrown away.
+ * Today's list: time, patient, reason, status. Rows link to the patient.
+ * Status filter tabs. All three states wired from the C1 components rather
+ * than re-implemented here.
  *
- * What it does establish, and what C2 will keep: every one of the three
- * states §1.3 requires -- loading, error, and empty -- is handled explicitly.
- * E28 is the case this guards against: "proper empty states, not blank
- * panels or a spinner forever."
+ * THE DATE CONTROL is not decoration. C2's done-when requires that "an empty
+ * date shows the empty state rather than a blank panel or an eternal
+ * spinner" (E28), and the seed only creates appointments for today -- so
+ * without a way to ask for a different day, the empty path is unreachable
+ * and therefore untested. It is also genuinely useful: a doctor checking
+ * tomorrow's list is an obvious thing to want.
  */
 import { useQuery } from '@tanstack/react-query'
 import { CalendarXIcon } from 'lucide-react'
+import { useState } from 'react'
+import {
+  AppointmentRow,
+  type AppointmentRowData,
+} from '@/components/appointments/appointment-row'
 import { EmptyState } from '@/components/states/empty-state'
 import { ErrorState } from '@/components/states/error-state'
 import { LoadingState } from '@/components/states/loading-state'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api, unwrap } from '@/lib/api'
+import { clinicToday, formatDateLong } from '@/lib/format'
 
-export default function Home() {
+/** Tab values. `all` is not an AppointmentStatus, hence the widened type. */
+const FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: 'waiting', label: 'Waiting' },
+  { value: 'in_consultation', label: 'In consultation' },
+  { value: 'completed', label: 'Completed' },
+] as const
+
+type Filter = (typeof FILTERS)[number]['value']
+
+export default function AppointmentsDashboard() {
+  const [date, setDate] = useState(clinicToday)
+  const [filter, setFilter] = useState<Filter>('all')
+
   const { data, isPending, error, refetch } = useQuery({
-    queryKey: ['appointments'],
-    queryFn: async () => unwrap(await api.appointments.get({ query: {} })),
+    // The date is part of the key, so switching days is a separate cache
+    // entry rather than a refetch that discards the previous list.
+    queryKey: ['appointments', date],
+    queryFn: async () => unwrap(await api.appointments.get({ query: { date } })),
   })
 
+  const appointments: AppointmentRowData[] = data?.appointments ?? []
+
+  /**
+   * Filtering happens client-side, deliberately.
+   *
+   * A day holds a few dozen appointments at most, they are already in
+   * memory, and a round trip per tab would make the filter feel slower than
+   * the list it filters. The server-side date filter earns its round trip;
+   * this does not.
+   */
+  const visible =
+    filter === 'all'
+      ? appointments
+      : appointments.filter((appointment) => appointment.status === filter)
+
+  const isToday = date === clinicToday()
+
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-12">
-      <header className="mb-8">
-        <h1 className="font-semibold text-2xl tracking-tight">Consultation Workspace</h1>
-        <p className="mt-1 text-muted-foreground text-sm">
-          Connected to the API at{' '}
-          <code className="font-mono text-xs">
-            {process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'}
-          </code>
-        </p>
+    <main className="mx-auto w-full max-w-3xl px-6 py-10">
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="font-semibold text-2xl tracking-tight">
+            {isToday ? "Today's appointments" : 'Appointments'}
+          </h1>
+          <p className="mt-1 text-muted-foreground text-sm">
+            {formatDateLong(`${date}T00:00:00`)}
+          </p>
+        </div>
+
+        <div>
+          <label
+            htmlFor="appointment-date"
+            className="mb-1 block font-medium text-muted-foreground text-xs"
+          >
+            Date
+          </label>
+          <Input
+            id="appointment-date"
+            type="date"
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+            className="w-auto"
+          />
+        </div>
       </header>
 
-      {/*
-        All three states come from the shared components (C1), not from
-        markup written here. F12 is graded across every view, so a per-screen
-        treatment is how an app ends up with three different spinners.
-      */}
-      {isPending && <LoadingState rows={3} label="Loading today's appointments" />}
+      <Tabs
+        value={filter}
+        onValueChange={(value) => setFilter(value as Filter)}
+        className="mb-4"
+      >
+        <TabsList>
+          {FILTERS.map(({ value, label }) => (
+            <TabsTrigger key={value} value={value}>
+              {label}
+              {/*
+                The count per tab, so the doctor can see there are three
+                people waiting without selecting the tab to find out.
+                Suppressed while loading, when the number would be a lie.
+              */}
+              {!isPending && !error && (
+                <span className="ml-1.5 text-muted-foreground text-xs tabular-nums">
+                  {value === 'all'
+                    ? appointments.length
+                    : appointments.filter((a) => a.status === value).length}
+                </span>
+              )}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
+      {isPending && <LoadingState rows={4} label="Loading appointments" />}
 
       {error && <ErrorState error={error} onRetry={() => void refetch()} />}
 
-      {data && data.appointments.length === 0 && (
+      {/*
+        Two distinct empty cases, and conflating them would be a small lie.
+        "No appointments scheduled" and "none match this filter" need
+        different actions from the doctor.
+      */}
+      {data && appointments.length === 0 && (
         <EmptyState
           icon={CalendarXIcon}
-          title="No appointments today"
-          description="Nothing is scheduled for today."
+          title={isToday ? 'No appointments today' : 'No appointments on this date'}
+          description="Nothing is scheduled. Pick another date to see a different day."
         />
       )}
 
-      {data && data.appointments.length > 0 && (
-        <ul className="space-y-3">
-          {data.appointments.map((appointment) => (
-            <li key={appointment.id}>
-              <Card>
-                <CardHeader className="flex-row items-center justify-between gap-4">
-                  {/*
-                    Inferred from the Elysia route's response type -- no
-                    hand-written interface, and a rename on the server breaks
-                    this line at compile time.
+      {data && appointments.length > 0 && visible.length === 0 && (
+        <EmptyState
+          icon={CalendarXIcon}
+          title="No appointments match this filter"
+          description={`There are ${appointments.length} appointments today, but none are ${FILTERS.find((f) => f.value === filter)?.label.toLowerCase()}.`}
+          action={{ label: 'Show all', onClick: () => setFilter('all') }}
+        />
+      )}
 
-                    Worth recording: the first draft of this file guessed
-                    `appointment.patientName`, and the compiler rejected it
-                    because the real shape nests the patient. That error is
-                    only possible because Eden's inference is live; with an
-                    `any` client it would have compiled and broken in the
-                    browser instead. That is C0's done-when, demonstrated.
-                  */}
-                  <CardTitle className="text-base">{appointment.patient.name}</CardTitle>
-                  <Badge variant="secondary">{appointment.status}</Badge>
-                </CardHeader>
-                <CardContent className="text-muted-foreground text-sm">
-                  {appointment.patient.age} {appointment.patient.sex}
-                  {appointment.reason ? ` — ${appointment.reason}` : null}
-                </CardContent>
-              </Card>
-            </li>
+      {visible.length > 0 && (
+        <ul className="space-y-2">
+          {visible.map((appointment) => (
+            <AppointmentRow key={appointment.id} appointment={appointment} />
           ))}
         </ul>
       )}
