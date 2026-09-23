@@ -1,0 +1,44 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The base targets a server runtime; the browser needs DOM types and
+    // the JSX transform. Everything else -- strict, noUncheckedIndexedAccess,
+    // exactOptionalPropertyTypes -- is inherited deliberately, so the
+    // frontend is held to the same standard as the API.
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "jsx": "preserve",
+    "module": "ESNext",
+
+    /**
+     * Inherited as `true` from the base, and it must stay that way.
+     *
+     * Eden pulls the API's `App` type from source, which drags in the whole
+     * apps/api and packages/shared graph -- and both are written with
+     * explicit `.ts` specifiers because Bun executes TypeScript directly.
+     * Turning this off makes every one of those imports a TS5097 error in a
+     * file this app does not own.
+     *
+     * Next's own bundler resolves extensionless specifiers regardless; this
+     * flag only affects what tsc will accept.
+     */
+    "allowJs": true,
+    "incremental": true,
+
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["./*"],
+      // Eden reads the API's exported `App` type directly from source
+      // (§2.2). This is the one import that makes the whole client typed.
+      "@emr/api/*": ["../api/*"],
+      "@emr/shared": ["../../packages/shared/src/index.ts"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
+}

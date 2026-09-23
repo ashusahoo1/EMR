@@ -7,7 +7,16 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!**/dist", "!**/build", "!**/.next", "!**/drizzle"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/build",
+      "!**/.next",
+      "!**/drizzle",
+      "!**/next-env.d.ts",
+      "!apps/web/components/ui",
+      "!apps/web/app/globals.css"
+    ]
   },
   "formatter": {
     "enabled": true,

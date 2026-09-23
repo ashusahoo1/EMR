@@ -8,12 +8,22 @@
  */
 import { Glob } from 'bun'
 
-const PACKAGES = ['apps/api', 'packages/shared'] as const
+/**
+ * Each package with the glob that finds its sources.
+ *
+ * apps/web is app-router shaped -- `app/` and `lib/` at the root, .tsx as
+ * well as .ts -- so it cannot share the `src/**` glob the others use.
+ */
+const PACKAGES = [
+  { path: 'apps/api', sources: 'src/**/*.ts' },
+  { path: 'packages/shared', sources: 'src/**/*.ts' },
+  { path: 'apps/web', sources: '{app,lib,components,hooks}/**/*.{ts,tsx}' },
+] as const
 
 let failed = false
 
-for (const pkg of PACKAGES) {
-  const glob = new Glob('src/**/*.ts')
+for (const { path: pkg, sources } of PACKAGES) {
+  const glob = new Glob(sources)
   let hasSources = false
   for await (const _ of glob.scan({ cwd: pkg })) {
     hasSources = true
