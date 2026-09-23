@@ -20,7 +20,42 @@ const PACKAGES = [
   { path: 'apps/web', sources: '{app,lib,components,hooks}/**/*.{ts,tsx}' },
 ] as const
 
+/**
+ * Regenerate Next's route types before checking apps/web.
+ *
+ * `PageProps<'/patients/[id]'>` is validated against a GENERATED union of
+ * every route in the file tree, written to `.next/types` and
+ * `.next/dev/types`. Those are build artefacts: they are refreshed by
+ * `next dev` and `next build`, so a fresh clone -- or a checkout where a
+ * route was added while the dev server was not running -- typechecks
+ * against a stale route list and rejects a page that is perfectly correct.
+ *
+ * That is exactly how this was found: adding the patient route produced
+ * `Type '"/patients/[id]"' does not satisfy the constraint 'AppRoutes'`
+ * while `.next/dev/types/routes.d.ts` still listed only the two older
+ * routes. Generating first makes the gate depend on the source tree rather
+ * than on whatever happened to run last.
+ */
+async function generateNextTypes(): Promise<void> {
+  const proc = Bun.spawnSync(['bunx', 'next', 'typegen'], {
+    cwd: 'apps/web',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+
+  if (proc.exitCode === 0) {
+    console.log('- apps/web: route types generated')
+    return
+  }
+
+  // Not fatal on its own -- tsc will report the real consequence, and a
+  // failure here with a passing tsc is not worth blocking on.
+  console.log('- apps/web: could not generate route types (continuing)')
+}
+
 let failed = false
+
+await generateNextTypes()
 
 for (const { path: pkg, sources } of PACKAGES) {
   const glob = new Glob(sources)

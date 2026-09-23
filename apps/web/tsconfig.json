@@ -37,8 +37,16 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    // Generated route types, refreshed by `next typegen` (which the
+    // typecheck script runs first).
+    //
+    // `.next/dev/types` is deliberately NOT included, though the scaffold
+    // listed it. It is written only by `next dev`, so it goes stale the
+    // moment a route is added while the dev server is not running -- and
+    // because its `AppRoutes` union is narrower, it wins over the correct
+    // one and rejects a page that is fine. A gate should depend on the
+    // source tree, not on which command happened to run last.
+    ".next/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }
