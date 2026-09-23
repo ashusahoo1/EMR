@@ -20,7 +20,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2Icon, SparklesIcon } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { ImageUpload } from '@/components/consultation/image-upload'
 import { NotesEditor } from '@/components/consultation/notes-editor'
+import {
+  TranscriptNotice,
+  TranscriptPreview,
+} from '@/components/consultation/transcript-notice'
 import { ErrorState } from '@/components/states/error-state'
 import { Button } from '@/components/ui/button'
 import { api, unwrap } from '@/lib/api'
@@ -37,6 +42,15 @@ export function ConsultationComposer({
 }) {
   const [notes, setNotes] = useState(initialNotes)
   const queryClient = useQueryClient()
+
+  /**
+   * The transcript exactly as the model produced it, or null.
+   *
+   * Kept so the "machine-transcribed" notice can disappear the moment the
+   * doctor edits a character -- the mark is a provenance claim, and it stops
+   * being true as soon as the text is theirs.
+   */
+  const [transcript, setTranscript] = useState<string | null>(null)
 
   const { status, flush } = useAutosave({
     value: notes,
@@ -82,6 +96,40 @@ export function ConsultationComposer({
 
   return (
     <div className="space-y-4">
+      {/*
+        F8 -- above the textarea, because photographing the page is how the
+        notes get there in the first place. It is an accelerant beside the
+        textarea, never a replacement: typing works on its own (§3.5).
+      */}
+      {!readOnly && (
+        <ImageUpload
+          disabled={isGenerating}
+          onTranscribed={({ text }) => {
+            /**
+             * Append rather than replace.
+             *
+             * A doctor who has already typed something and then photographs
+             * a second page must not lose what they wrote. Replacing would
+             * be silent data loss of exactly the kind §4.6 forbids
+             * elsewhere, and there is no undo here.
+             *
+             * The transcript marker tracks the FULL resulting text, so the
+             * notice reflects what is actually in the box.
+             */
+            const next = notes.trim() === '' ? text : `${notes.trimEnd()}\n\n${text}`
+            setNotes(next)
+            setTranscript(next)
+          }}
+        />
+      )}
+
+      {transcript !== null && (
+        <>
+          <TranscriptNotice transcript={transcript} currentText={notes} />
+          <TranscriptPreview text={notes} />
+        </>
+      )}
+
       <NotesEditor
         value={notes}
         onChange={setNotes}
