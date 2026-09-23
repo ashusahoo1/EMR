@@ -767,11 +767,13 @@ Responsive down to tablet · keyboard navigation · focus rings · `aria-label`s
 
 ### Sector C exit criteria
 
-- [ ] Every view has loading, error and empty states
-- [ ] Eden types flow end to end — zero `any` at the API boundary
-- [ ] AI vs confirmed content visually distinguishable
-- [ ] Unsaved-work guard fires
-- [ ] No console errors anywhere
+- [x] Every view has loading, error and empty states
+- [x] Eden types flow end to end — zero `any` at the API boundary
+- [x] AI vs confirmed content visually distinguishable
+- [x] Unsaved-work guard fires
+- [x] No console errors anywhere
+
+> **Verified at C10.** States come from the three C1 components rather than per-screen markup, so every view shares one treatment. The `any` check is enforced by `lib/api.types-check.ts`, which fails the typecheck in both directions — if inference breaks, and if it silently degrades to `any`. The draft carries a dashed border, a tint and a "Not saved" badge that the confirmed record deliberately does not. The guard was exercised across its full decision table at C8. A five-route walk-through produced no errors or hydration warnings in the dev server log.
 
 ---
 

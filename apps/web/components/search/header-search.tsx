@@ -68,7 +68,12 @@ export function HeaderSearch() {
   const showEmpty = isSearchable && !isFetching && !error && !hasResults
 
   return (
-    <div ref={containerRef} className="relative w-full max-w-xs">
+    /*
+      Narrower on a phone so the logo and search share the header without
+      wrapping; full width from `sm` up. The results popover is anchored to
+      this container, so it inherits the same behaviour.
+    */
+    <div ref={containerRef} className="relative w-40 sm:w-full sm:max-w-xs">
       <div className="relative">
         <SearchIcon
           className="-translate-y-1/2 absolute top-1/2 left-2.5 size-3.5 text-muted-foreground"
@@ -99,7 +104,13 @@ export function HeaderSearch() {
 
       {isOpen && isSearchable && (
         <div
-          className="absolute top-full right-0 left-0 z-50 mt-1 max-h-96 overflow-y-auto rounded-md border bg-popover shadow-md"
+          /*
+            Anchored right and given its own width, because the input is
+            only 160px on a phone and a result row needs more than that.
+            `right-0` keeps it inside the viewport rather than overflowing
+            off the edge as a left-anchored popover would.
+          */
+          className="absolute top-full right-0 z-50 mt-1 max-h-96 w-72 overflow-y-auto rounded-md border bg-popover shadow-md sm:left-0 sm:w-auto"
           // Announced as results arrive, without stealing focus from the
           // input the doctor is still typing in.
           role="listbox"

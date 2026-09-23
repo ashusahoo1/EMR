@@ -26,10 +26,12 @@ export function StartConsultationButton({
   appointmentId,
   consultationId,
   size = 'sm',
+  className,
 }: {
   appointmentId: string
   consultationId: string | null
   size?: 'sm' | 'default'
+  className?: string
 }) {
   const router = useRouter()
 
@@ -66,6 +68,7 @@ export function StartConsultationButton({
 
   return (
     <Button
+      className={className}
       size={size}
       variant={consultationId ? 'outline' : 'default'}
       onClick={() => start.mutate()}

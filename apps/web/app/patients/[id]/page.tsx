@@ -12,7 +12,19 @@
  * API URL and its error handling on the server, where the C1 error states
  * and React Query's retry cannot reach it.
  */
+import type { Metadata } from 'next'
 import { PatientProfile } from '@/components/patient/patient-profile'
+
+/**
+ * A static title rather than the patient's name (C10).
+ *
+ * Fetching the patient here to title the tab would mean a second
+ * server-side request on every navigation, duplicating what the client
+ * query already does -- and it would put a patient's NAME in the browser
+ * history and window title, which is more exposure than a tab label is
+ * worth for a clinical record.
+ */
+export const metadata: Metadata = { title: 'Patient' }
 
 export default async function PatientPage({ params }: PageProps<'/patients/[id]'>) {
   const { id } = await params

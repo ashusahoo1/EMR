@@ -16,7 +16,17 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Consultation Workspace',
+  /**
+   * A template, so every page contributes its own half (C10).
+   *
+   * Without it each route shows the same string, and a doctor with three
+   * tabs open -- a patient, a consultation, the day's list -- cannot tell
+   * them apart from the tab strip, which is exactly when it matters.
+   */
+  title: {
+    template: '%s · Consultation Workspace',
+    default: 'Consultation Workspace',
+  },
   description: 'AI-assisted consultation notes for outpatient clinics.',
 }
 

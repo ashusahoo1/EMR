@@ -35,54 +35,71 @@ export interface AppointmentRowData {
 export function AppointmentRow({ appointment }: { appointment: AppointmentRowData }) {
   const { patient } = appointment
 
+  /*
+    RESPONSIVE (C10). Four items on one line -- time, name, status, action
+    -- need about 500px to breathe, and a 375px phone has 327px after the
+    page gutter. Below `sm` the row becomes a two-line stack with the action
+    full width; from `sm` up it is the single scannable line a desktop list
+    wants.
+  */
   return (
-    <li className="relative flex items-center gap-4 rounded-lg border bg-card px-4 py-3 transition-colors hover:bg-accent focus-within:outline-2 focus-within:outline-ring focus-within:outline-offset-2">
-      {/*
-        Tabular numerals so the times form a clean column. Without it,
-        "09:00" and "11:30" are different widths and the names beside them
-        do not line up.
-      */}
-      <time
-        dateTime={appointment.scheduledAt}
-        className="w-20 shrink-0 font-medium text-sm tabular-nums"
-      >
-        {formatTime(appointment.scheduledAt)}
-      </time>
-
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-medium text-sm">
-          {/*
-            `after:absolute after:inset-0` stretches this link across the
-            row, so the whole card is clickable while the markup stays a
-            single anchor around the name. The consultation button sits
-            above it via `relative`, keeping its own click target.
-          */}
-          <Link
-            href={`/patients/${patient.id}`}
-            className="rounded-sm after:absolute after:inset-0 focus-visible:outline-none"
-          >
-            {patient.name}
-          </Link>
-          <span className="ml-2 font-normal text-muted-foreground">
-            {formatPatientMeta(patient.age, patient.sex)}
-          </span>
-        </p>
+    <li className="relative flex flex-col gap-3 rounded-lg border bg-card px-4 py-3 transition-colors hover:bg-accent focus-within:outline-2 focus-within:outline-ring focus-within:outline-offset-2 sm:flex-row sm:items-center sm:gap-4">
+      <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center sm:gap-4">
         {/*
-          `reason` is nullable in the contract. Rendering the raw null would
-          print nothing and leave the row looking broken, so the absence is
-          stated.
+          Tabular numerals so the times form a clean column. Without it,
+          "09:00" and "11:30" are different widths and the names beside them
+          do not line up.
         */}
-        <p className="truncate text-muted-foreground text-sm">
-          {appointment.reason ?? 'No reason recorded'}
-        </p>
+        <time
+          dateTime={appointment.scheduledAt}
+          className="w-16 shrink-0 font-medium text-sm tabular-nums sm:w-20"
+        >
+          {formatTime(appointment.scheduledAt)}
+        </time>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium text-sm">
+            {/*
+              `after:absolute after:inset-0` stretches this link across the
+              row, so the whole card is clickable while the markup stays a
+              single anchor around the name. The consultation button sits
+              above it via `relative`, keeping its own click target.
+            */}
+            <Link
+              href={`/patients/${patient.id}`}
+              className="rounded-sm after:absolute after:inset-0 focus-visible:outline-none"
+            >
+              {patient.name}
+            </Link>
+            <span className="ml-2 font-normal text-muted-foreground">
+              {formatPatientMeta(patient.age, patient.sex)}
+            </span>
+          </p>
+          {/*
+            `reason` is nullable in the contract. Rendering the raw null
+            would print nothing and leave the row looking broken, so the
+            absence is stated.
+          */}
+          <p className="truncate text-muted-foreground text-sm">
+            {appointment.reason ?? 'No reason recorded'}
+          </p>
+        </div>
+
+        <StatusBadge
+          status={appointment.status as AppointmentStatus}
+          className="shrink-0"
+        />
       </div>
 
-      <StatusBadge status={appointment.status as AppointmentStatus} />
-
+      {/*
+        Full width on a phone, auto beside the row on a desktop. A 44px-tall
+        full-width target is the one most reliably hit with a thumb.
+      */}
       <div className="relative shrink-0">
         <StartConsultationButton
           appointmentId={appointment.id}
           consultationId={appointment.consultationId}
+          className="w-full sm:w-auto"
         />
       </div>
     </li>
