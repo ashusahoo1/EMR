@@ -13,6 +13,7 @@ import { app } from '../app.ts'
 import { db } from '../db/client.ts'
 import { appointments } from '../db/schema.ts'
 import { seed } from '../db/seed.ts'
+import { N01_TRANSCRIPT } from '../llm/stub.ts'
 import { fakeJpeg } from '../tests/fixtures.ts'
 
 const MISSING_UUID = '00000000-0000-4000-8000-000000000000'
@@ -64,8 +65,15 @@ async function postImage<T>(
  * Creates a fresh appointment rather than reusing a seeded one: the file
  * seeds once, so consuming a seeded appointment would make tests depend on
  * execution order (one consultation per appointment is a unique index).
+ *
+ * The notes default to N01_TRANSCRIPT, which is the source the stub's N01
+ * note is grounded against. That pairing is load-bearing now that B6 runs
+ * real verification: with shorter notes the stub's spans ("allergic to
+ * penicillin", "mild cough") are genuinely absent, and verification
+ * correctly reports seven fabrications. Source and output have to be a
+ * matched pair, exactly as they would be in production.
  */
-async function draftWithNotes(notes = 'fever since 3 days'): Promise<string> {
+async function draftWithNotes(notes: string = N01_TRANSCRIPT): Promise<string> {
   const [seedRow] = await db.select().from(appointments).limit(1)
   if (!seedRow) throw new Error('seed has no appointments')
 

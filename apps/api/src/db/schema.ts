@@ -164,7 +164,14 @@ export const aiGenerations = pgTable(
      * never stored (§2.3) -- only the transcript. */
     input: text('input').notNull(),
     /** Exactly what came back, before any repair or normalisation. */
-    rawOutput: jsonb('raw_output').notNull(),
+    /**
+     * Nullable: a call that timed out or was refused produced no output, and
+     * B6 requires the attempt be audited anyway -- "a failed generation is
+     * exactly what an audit trail is for". Forcing a placeholder value here
+     * would make "no output" indistinguishable from "the model returned
+     * null", which is precisely the distinction the trail exists to record.
+     */
+    rawOutput: jsonb('raw_output'),
     /**
      * §4.8: without the model name and prompt version this audit trail is
      * uninterpretable six months later. One extra column each.

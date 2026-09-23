@@ -1,0 +1,1 @@
+ALTER TABLE "ai_generations" ALTER COLUMN "raw_output" DROP NOT NULL;

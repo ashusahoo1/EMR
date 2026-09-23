@@ -994,7 +994,7 @@ One row per model call. §7.3: a column cannot hold several attempts; a row per 
 | consultation_id | uuid FK | |
 | type | text NOT NULL | `GenerationType` — both stages, one table |
 | input | text NOT NULL | notes, or an image reference |
-| raw_output | jsonb NOT NULL | exactly what came back |
+| raw_output | jsonb NULL | exactly what came back; null when the call produced none |
 | model | text NOT NULL | **§4.8: without this the audit trail is uninterpretable in six months** |
 | prompt_version | text NOT NULL | same reason |
 | verification_status | text | `VerificationStatus` |
@@ -1007,6 +1007,10 @@ One row per model call. §7.3: a column cannot hold several attempts; a row per 
 Index: `ai_generations(consultation_id, created_at)`.
 
 **The image is never stored** (§2.3, F17 scope decision). Only the transcript.
+
+> **Amended during the build (B6):** `raw_output` was originally `NOT NULL`. That contradicted B6's own requirement to "write the `ai_generations` row **even when** verification fails" — a call that timed out or was refused produced no output, so the insert failed and the audit row silently vanished. Found because the graceful-degradation design worked as intended: the request still returned a correct `504`, and only the error log showed the write had failed.
+>
+> Made nullable rather than given a placeholder value, because a placeholder would make "no output" indistinguishable from "the model returned null" — precisely the distinction the trail exists to record. Migration `0001_flimsy_swordsman.sql`.
 
 ---
 

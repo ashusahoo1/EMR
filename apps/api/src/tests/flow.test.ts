@@ -14,6 +14,7 @@
  */
 import { beforeEach, describe, expect, test } from 'bun:test'
 import type { StructuredNote } from '@emr/shared'
+import { N01_TRANSCRIPT } from '../llm/stub.ts'
 import { api, doctorNote, freshAppointment, ok, resetDb } from './helpers.ts'
 
 beforeEach(async () => {
@@ -55,7 +56,11 @@ describe('the complete consultation flow', () => {
     expect(started.appointment.status).toBe('in_consultation')
 
     // --- 5. Type the rough notes (F4) --------------------------------------
-    const rawNotes = 'fever since 3 days, mild cough\nno breathing difficulty'
+    // The full N01 note, which is what the stub's structured output is
+    // grounded against. Since B6 runs real verification, the source text and
+    // the AI output have to be a matched pair -- a partial note would make
+    // the stub's spans genuinely ungrounded and flag correctly.
+    const rawNotes = N01_TRANSCRIPT
     const created = ok(
       await api.consultations.post({ appointmentId: appointment.id, rawNotes }),
     )

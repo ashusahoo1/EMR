@@ -54,21 +54,39 @@ describe('a queued response steers the whole pipeline', () => {
     expect(stubLlm.structureCalls.at(-1)?.notes).toBe('unmistakable marker text')
   })
 
-  test('E11: schema-invalid output is rejected, never persisted', async () => {
+  test('E11: schema-invalid output triggers the retry, then is rejected', async () => {
     // The provider's constrained decoding guarantees shape, not truth --
     // so the service validates before anything reaches the database (§4.5).
+    //
+    // TWO bad responses, because B6 retries once. Queueing one would let the
+    // retry pick up the stub's good default and pass, which would test the
+    // opposite of what this test is named for.
     stubLlm.queueStructure({ chiefComplaint: 'a bare string, not an object' })
+    stubLlm.queueStructure({ chiefComplaint: 'still not an object' })
 
     const id = await draft()
     const response = await api.consultations({ id }).structure.post()
     expect(response.status).toBe(502)
 
+    // E11: never saved as partial data.
     const stored = ok(await api.consultations({ id }).get())
     expect(stored.consultation.aiNote).toBeNull()
   })
 
+  test('E11: one bad response is RESCUED by the single retry', async () => {
+    // The other half of the contract, and the reason the retry exists: a
+    // transient malformed response should not cost the doctor their note.
+    stubLlm.queueStructure({ chiefComplaint: 'a bare string, not an object' })
+    // The next call falls through to the stub's good N01 default.
+
+    const id = await draft()
+    const response = await api.consultations({ id }).structure.post()
+    expect(response.status).toBe(200)
+    expect(stubLlm.structureCalls).toHaveLength(2)
+  })
+
   test('E12: an invented extra key is rejected by the schema', async () => {
-    stubLlm.queueStructure({
+    const withExtraKey = {
       chiefComplaint: { text: 'Fever', sourceSpan: 'fever since 3 days' },
       symptoms: [],
       relevantHistory: [],
@@ -76,11 +94,28 @@ describe('a queued response steers the whole pipeline', () => {
       doctorPlan: [],
       missingInformation: [],
       bloodPressure: '130/80',
-    })
+    }
+    // additionalProperties: false means the model cannot invent a
+    // bloodPressure key -- E13's headline case, caught at the schema level
+    // rather than by prompting.
+    stubLlm.queueStructure(withExtraKey)
+    stubLlm.queueStructure(withExtraKey)
 
     const id = await draft()
     const response = await api.consultations({ id }).structure.post()
     expect(response.status).toBe(502)
+  })
+
+  test('the retry is ONE, never a loop (§4.6)', async () => {
+    // Unbounded retries burn cost and latency and rarely converge. Three
+    // bad responses must produce exactly two calls, not three.
+    stubLlm.queueStructure({ bad: 1 })
+    stubLlm.queueStructure({ bad: 2 })
+    stubLlm.queueStructure({ bad: 3 })
+
+    const id = await draft()
+    await api.consultations({ id }).structure.post()
+    expect(stubLlm.structureCalls).toHaveLength(2)
   })
 })
 
