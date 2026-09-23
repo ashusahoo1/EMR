@@ -16,6 +16,18 @@ import { join } from 'node:path'
 // would bury real failures. log.ts reads this to stay quiet.
 process.env.NODE_ENV ??= 'test'
 
+/**
+ * Raise the AI rate limit for the suite.
+ *
+ * The limiter is process-wide by design (see rate-limit.ts), and every
+ * in-process test request shares one client key, so hundreds of them would
+ * exhaust a production-sized budget and fail unrelated tests according to
+ * execution order. The limiter stays ENABLED -- its middleware still runs on
+ * every AI request -- and its actual behaviour is tested directly with an
+ * injected clock in rate-limit.test.ts.
+ */
+process.env.AI_RATE_LIMIT_MAX ??= '100000'
+
 const envPath = join(import.meta.dir, '..', 'apps', 'api', '.env')
 
 if (existsSync(envPath)) {

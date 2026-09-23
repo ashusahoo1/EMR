@@ -100,6 +100,10 @@ export class OpenAiClient implements LlmClient {
       response = await this.client.chat.completions.create({
         model: this.visionModel,
         temperature: TRANSCRIBE_TEMPERATURE,
+        // §4.11 -- token cap per request. Several times the longest
+        // plausible transcript, so a real note is never truncated, but a
+        // model looping on a pattern is stopped rather than billed for.
+        max_completion_tokens: LIMITS.transcribeMaxOutputTokens,
         messages: [
           { role: 'system', content: TRANSCRIBE_SYSTEM_PROMPT },
           {
@@ -134,10 +138,33 @@ export class OpenAiClient implements LlmClient {
       usage: response.usage,
     })
 
-    const text = response.choices[0]?.message?.content?.trim() ?? ''
+    const choice = response.choices[0]
+    const text = choice?.message?.content?.trim() ?? ''
 
     if (text.length === 0) {
       throw new LlmError(LlmFailure.BadOutput, 'The model returned no text.', { meta })
+    }
+
+    /**
+     * The token cap fired (§4.11, E36).
+     *
+     * Treated as a failure, not a partial result. A truncated transcript is
+     * the most dangerous possible output of this stage: it looks like a
+     * complete note, so the doctor has no cue that the last two lines --
+     * possibly the drug and the dose -- were silently cut off. Better to
+     * fail loudly and let them retry or type it themselves.
+     */
+    if (choice?.finish_reason === 'length') {
+      log.warn('transcription hit the output token cap', {
+        model: meta.model,
+        cap: LIMITS.transcribeMaxOutputTokens,
+        chars: text.length,
+      })
+      throw new LlmError(
+        LlmFailure.BadOutput,
+        'The transcription was cut off before it was complete.',
+        { meta },
+      )
     }
 
     // E34/E18 -- a refusal is not a technical error, and the doctor should be
@@ -186,6 +213,10 @@ export class OpenAiClient implements LlmClient {
       response = await this.client.chat.completions.create({
         model: this.textModel,
         temperature: STRUCTURE_TEMPERATURE,
+        // §4.11 -- token cap. Higher than transcription's because the JSON
+        // scaffolding and a duplicated sourceSpan per item roughly double
+        // the output for the same clinical content.
+        max_completion_tokens: LIMITS.structureMaxOutputTokens,
         response_format: {
           type: 'json_schema',
           json_schema: {

@@ -25,6 +25,28 @@ export const LIMITS = {
   llmTimeoutMs: 45_000,
 
   /**
+   * Output token caps per call (§4.11 -- "token and cost caps per request").
+   *
+   * These bound COST and runaway generation, which the rate limiter cannot:
+   * it counts requests, and one request with a huge note costs more than ten
+   * small ones.
+   *
+   * Sized from the real artefacts, not guessed. A handwritten OPD note is a
+   * few hundred characters, so 2000 output tokens is several times the
+   * longest plausible transcript -- enough that a legitimate note is never
+   * truncated, low enough that a model looping on a pattern stops quickly.
+   * The structured note carries the same content plus JSON scaffolding and
+   * a duplicated sourceSpan per item, so it gets roughly double.
+   *
+   * A response that hits the cap is treated as a FAILURE, never as a result:
+   * truncated JSON is not a partial note, and E36 says output
+   * disproportionate to its input means the model is generating rather than
+   * reading.
+   */
+  transcribeMaxOutputTokens: 2_000,
+  structureMaxOutputTokens: 4_000,
+
+  /**
    * §4.6 -- one retry, never a loop. Unbounded retries burn cost and latency
    * and rarely converge.
    */

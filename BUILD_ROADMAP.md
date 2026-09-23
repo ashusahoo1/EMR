@@ -586,14 +586,22 @@ load consultation
 
 Each is small; skipping them is what §4.11 warns about, because they only surface when something breaks — which, during a live demo, it will.
 
-- [ ] API key server-side only, never in any client response (E37 — the brief names this as its own example of good engineering)
-- [ ] Timeout on every model call (E22)
-- [ ] Rate limit on `/structure` and `/transcribe` (E21)
-- [ ] Token/cost cap per request
-- [ ] Structured log per AI call: latency, tokens, verification outcome
-- [ ] **Graceful degradation:** provider down → doctor still writes and saves free-text notes (E23). Already true by construction if Sector A was built first. **Verify it, do not assume it.**
+- [x] API key server-side only, never in any client response (E37 — the brief names this as its own example of good engineering)
+- [x] Timeout on every model call (E22)
+- [x] Rate limit on `/structure` and `/transcribe` (E21)
+- [x] Token/cost cap per request
+- [x] Structured log per AI call: latency, tokens, verification outcome
+- [x] **Graceful degradation:** provider down → doctor still writes and saves free-text notes (E23). Already true by construction if Sector A was built first. **Verify it, do not assume it.**
 
 **Done when:** `LLM_ENABLED=false`, full consultation still creatable and savable end to end.
+
+> **Built at B7.** Three of the six were already true (timeout from B0, structured logging from B6, degradation from A8's `LLM_ENABLED` gate) and were *verified* rather than assumed, as the roadmap insists. The two genuinely new pieces:
+>
+> **Rate limiter** (`src/rate-limit.ts`) — sliding window, not fixed. A fixed window allows 2× the limit across a boundary (20 calls at :59 plus 20 at :01), which is exactly the burst being prevented. Applied via `onBeforeHandle` on the AI route group only: read and write endpoints stay unthrottled, so a doctor who exhausts the AI budget can still save their note. Rejected attempts are deliberately *not* recorded, or an over-eager retrying client would extend its own lockout indefinitely.
+>
+> **Token caps** (`LIMITS.transcribeMaxOutputTokens` / `structureMaxOutputTokens`) — the rate limiter bounds request *count*; these bound *spend*, which is the real money guardrail since one large note costs more than ten small ones. A response that hits the cap is a **failure, not a partial result**: a truncated transcript is the most dangerous output of stage 1, because it looks complete while the drug and dose may have been silently cut off.
+>
+> **Known limitations**, for the README: the limiter is in-process (resets on restart, not shared across replicas) and IP-keyed (shared NAT shares a bucket; `x-forwarded-for` is spoofable). Both are fixed by F21 auth plus Redis, and neither matters at one process serving one clinic.
 
 ---
 
