@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeftIcon } from 'lucide-react'
 import Link from 'next/link'
 import { ConsultationComposer } from '@/components/consultation/consultation-composer'
+import { DraftReviewPanel } from '@/components/consultation/draft-review-panel'
 import { StructuredNoteView } from '@/components/consultation/structured-note-view'
 import { ErrorState } from '@/components/states/error-state'
 import { LoadingState } from '@/components/states/loading-state'
@@ -71,17 +72,22 @@ export function ConsultationView({ consultationId }: { consultationId: string })
         readOnly={isConfirmed}
       />
 
-      {/*
-        A minimal draft preview so C4 is usable on its own. C6 replaces this
-        with the editable review, provenance and verification flags.
-      */}
-      {consultation.aiNote && (
-        <section className="mt-8 rounded-lg border bg-card p-4">
-          <h2 className="mb-3 font-medium text-sm">AI draft</h2>
-          <StructuredNoteView note={consultation.aiNote} />
-        </section>
+      {/* F5 + F6 -- the editable draft, its flags and the nudge (C6). */}
+      {!isConfirmed && consultation.aiNote && (
+        <div className="mt-8">
+          <DraftReviewPanel
+            consultationId={consultationId}
+            aiNote={consultation.aiNote}
+            verification={consultation.verification}
+          />
+        </div>
       )}
 
+      {/*
+        F14 -- the confirmed note looks deliberately UNLIKE the draft: a
+        solid border and no "not saved" badge. The visual distinction is the
+        point, so the two must not share a container style.
+      */}
       {isConfirmed && consultation.confirmedNote && (
         <section className="mt-8 rounded-lg border bg-card p-4">
           <h2 className="mb-3 font-medium text-sm">Saved note</h2>
