@@ -18,15 +18,20 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { DraftReview } from '@/components/consultation/draft-review'
+import { SaveConsultation } from '@/components/consultation/save-consultation'
 import { ErrorState } from '@/components/states/error-state'
 import { api, unwrap } from '@/lib/api'
 
 export function DraftReviewPanel({
   consultationId,
+  appointmentId,
+  patientId,
   aiNote,
   verification,
 }: {
   consultationId: string
+  appointmentId: string
+  patientId: string
   aiNote: StructuredNote
   verification: VerificationResult | null
 }) {
@@ -76,6 +81,24 @@ export function DraftReviewPanel({
           setHasEdits(true)
         }}
         onRegenerate={() => regenerate.mutate()}
+        footer={
+          /*
+            C7's save controls fill the slot C6 left open, so they sit below
+            the nudge without the nudge being able to gate them -- they are
+            siblings, not parent and child.
+
+            `note` is the doctor's edited working copy, not `aiNote`. Saving
+            the AI's version would discard every correction they just made,
+            which is the exact failure F13's separate columns exist to make
+            impossible.
+          */
+          <SaveConsultation
+            consultationId={consultationId}
+            appointmentId={appointmentId}
+            patientId={patientId}
+            note={note}
+          />
+        }
       />
 
       {regenerate.error && (

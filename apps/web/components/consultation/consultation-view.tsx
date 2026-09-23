@@ -1,17 +1,24 @@
 'use client'
 
 /**
- * The consultation screen (BUILD_ROADMAP C4).
+ * The consultation screen (BUILD_ROADMAP C4, C6, C7).
  *
- * Loads the consultation and renders the composer. C6 adds the AI draft
- * review below this; C7 adds save and status. Kept as its own component so
- * the page stays a thin server shell that only awaits `params`.
+ * The whole flow on one page: write or photograph notes, generate, review
+ * and correct the draft, save. Kept as its own component so the route stays
+ * a thin server shell that only awaits `params`.
+ *
+ * THREE MUTUALLY EXCLUSIVE STATES, and the third is the one that matters:
+ *   draft + aiNote       -> the editable review with its flags (C6)
+ *   draft, no aiNote     -> save the free-text notes alone (E29, E23)
+ *   confirmed            -> the read-only record, styled unlike the draft
  */
+import { emptyStructuredNote } from '@emr/shared'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeftIcon } from 'lucide-react'
 import Link from 'next/link'
 import { ConsultationComposer } from '@/components/consultation/consultation-composer'
 import { DraftReviewPanel } from '@/components/consultation/draft-review-panel'
+import { SaveConsultation } from '@/components/consultation/save-consultation'
 import { StructuredNoteView } from '@/components/consultation/structured-note-view'
 import { ErrorState } from '@/components/states/error-state'
 import { LoadingState } from '@/components/states/loading-state'
@@ -77,8 +84,40 @@ export function ConsultationView({ consultationId }: { consultationId: string })
         <div className="mt-8">
           <DraftReviewPanel
             consultationId={consultationId}
+            appointmentId={consultation.appointmentId}
+            patientId={consultation.patientId}
             aiNote={consultation.aiNote}
             verification={consultation.verification}
+          />
+        </div>
+      )}
+
+      {/*
+        E29 + E23 -- SAVE WITHOUT AN AI NOTE AT ALL.
+        "Free-text notes alone are a valid consultation."
+
+        This is the path a doctor takes when the provider is down (§4.11's
+        most important guardrail) or when they simply did not want to
+        generate. Without it, the save button only exists beside an AI draft
+        and the AI becomes a dependency for recording a visit -- exactly the
+        coupling the whole degradation story exists to prevent.
+
+        An empty structured note is saved: the raw notes carry the content,
+        and inventing structured fields the doctor never approved would be
+        the fabrication the rest of the system is built to avoid.
+      */}
+      {!isConfirmed && !consultation.aiNote && (
+        <div className="mt-8 rounded-lg border bg-card p-4">
+          <h2 className="mb-1 font-medium text-sm">Save without a structured note</h2>
+          <p className="mb-3 text-muted-foreground text-sm">
+            Your written notes are recorded as they are. You can generate a structured
+            note first, but you do not have to.
+          </p>
+          <SaveConsultation
+            consultationId={consultationId}
+            appointmentId={consultation.appointmentId}
+            patientId={consultation.patientId}
+            note={emptyStructuredNote()}
           />
         </div>
       )}
