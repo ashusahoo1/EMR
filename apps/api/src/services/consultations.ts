@@ -140,7 +140,21 @@ function isUniqueViolation(error: unknown): boolean {
  */
 export async function updateConsultation(
   id: string,
-  patch: { rawNotes?: string; aiNote?: StructuredNote; confirmedNote?: StructuredNote },
+  patch: {
+    rawNotes?: string
+    aiNote?: StructuredNote
+    confirmedNote?: StructuredNote
+    /**
+     * The stage 4 result for `aiNote` (B6).
+     *
+     * Stored alongside the note it describes, because the consultation page
+     * re-reads both from the database on every load. Without it the flags
+     * exist only in the structure response and vanish on the first refresh --
+     * which means the doctor sees an unverified-looking draft and has no way
+     * to know a fabricated BP was ever flagged.
+     */
+    verification?: VerificationResult
+  },
 ): Promise<ConsultationDetail> {
   if (patch.rawNotes !== undefined) assertNotesWithinLimits(patch.rawNotes)
 
@@ -162,6 +176,7 @@ export async function updateConsultation(
       ...(patch.confirmedNote !== undefined
         ? { confirmedNote: patch.confirmedNote }
         : {}),
+      ...(patch.verification !== undefined ? { verification: patch.verification } : {}),
       updatedAt: new Date(),
     })
     .where(eq(consultations.id, id))

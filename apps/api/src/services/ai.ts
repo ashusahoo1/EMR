@@ -255,7 +255,11 @@ export async function structureConsultation(
 
   // Persist as aiNote, never as confirmedNote: AI output is never saved as
   // final by default (§4.7). Nothing is clinical until the doctor confirms.
-  await updateConsultation(consultationId, { aiNote: note })
+  // Both together: the note and the verdict on it. Storing the note alone
+  // would leave the consultation page showing an unflagged draft after any
+  // reload, because it re-reads from the database rather than from this
+  // response.
+  await updateConsultation(consultationId, { aiNote: note, verification })
 
   log.info('structured', {
     consultationId,

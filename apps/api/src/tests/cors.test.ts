@@ -21,7 +21,15 @@ const ORIGINAL_ENV = process.env.NODE_ENV
 const ORIGINAL_WEB_ORIGIN = process.env.WEB_ORIGIN
 
 afterEach(() => {
-  process.env.NODE_ENV = ORIGINAL_ENV
+  // `delete` rather than assigning undefined: exactOptionalPropertyTypes
+  // rejects the assignment, and setting the string "undefined" would be
+  // worse than either.
+  if (ORIGINAL_ENV === undefined) {
+    delete process.env.NODE_ENV
+  } else {
+    process.env.NODE_ENV = ORIGINAL_ENV
+  }
+
   if (ORIGINAL_WEB_ORIGIN === undefined) {
     delete process.env.WEB_ORIGIN
   } else {
