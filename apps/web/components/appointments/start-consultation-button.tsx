@@ -37,6 +37,28 @@ export function StartConsultationButton({
 
   const start = useMutation({
     mutationFn: async () => {
+      /**
+       * F15 -- move the appointment into `in_consultation` (C7).
+       *
+       * The transition rules are waiting -> in_consultation -> completed,
+       * so skipping this step makes the save's waiting -> completed jump
+       * ILLEGAL and the API answers 409 INVALID_STATUS_TRANSITION. The
+       * appointment then sits on "Waiting" forever even though the note is
+       * saved, which is what manual testing found.
+       *
+       * Deliberately not allowed to block opening the consultation: a
+       * scheduling label is not worth standing between a doctor and the
+       * notes they came here to write. Re-applying an existing status is a
+       * no-op success server-side, so reopening is safe too.
+       */
+      try {
+        await api.appointments({ id: appointmentId }).status.patch({
+          status: 'in_consultation',
+        })
+      } catch {
+        // Already in_consultation or completed -- either is fine.
+      }
+
       if (consultationId) return consultationId
 
       try {

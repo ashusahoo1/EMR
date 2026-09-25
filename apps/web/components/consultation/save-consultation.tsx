@@ -63,14 +63,32 @@ export function SaveConsultation({
        *
        * Re-applying an existing status is a no-op success server-side, so
        * an already-completed appointment does not error here either.
+       *
+       * TWO STEPS, because the transitions are waiting -> in_consultation
+       * -> completed and the API rejects the jump with 409. Opening the
+       * consultation normally does the first step, but a consultation
+       * reached another way -- a direct URL, a bookmark, a row whose status
+       * was changed elsewhere -- would leave the appointment stuck on
+       * "Waiting" with the note saved. Manual testing found exactly that.
        */
       try {
         await api.appointments({ id: appointmentId }).status.patch({
           status: 'completed',
         })
       } catch {
-        // Logged rather than surfaced; the save itself succeeded.
-        console.warn('Consultation saved, but the appointment status did not advance.')
+        // Likely still `waiting`. Step through the intermediate state and
+        // try once more.
+        try {
+          await api.appointments({ id: appointmentId }).status.patch({
+            status: 'in_consultation',
+          })
+          await api.appointments({ id: appointmentId }).status.patch({
+            status: 'completed',
+          })
+        } catch {
+          // Logged rather than surfaced; the save itself succeeded.
+          console.warn('Consultation saved, but the appointment status did not advance.')
+        }
       }
 
       return result
