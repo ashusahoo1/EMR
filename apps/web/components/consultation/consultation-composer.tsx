@@ -31,6 +31,7 @@ import { ErrorState } from '@/components/states/error-state'
 import { Button } from '@/components/ui/button'
 import { api, unwrap } from '@/lib/api'
 import { useAutosave } from '@/lib/use-autosave'
+import { useSingleFlight } from '@/lib/use-single-flight'
 
 export function ConsultationComposer({
   consultationId,
@@ -104,6 +105,17 @@ export function ConsultationComposer({
     return () => setDirty('notes', false)
   }, [status, setDirty])
 
+  /**
+   * E24 -- the REAL double-click guard.
+   *
+   * `disabled={isGenerating}` below is not it: isPending only becomes true
+   * after React re-renders, and a genuine double-click delivers both events
+   * before that happens. Playwright's dblclick sent two /structure requests
+   * straight through the disabled attribute. This latches synchronously on
+   * the first event, so the second is dropped before anything runs.
+   */
+  const generateOnce = useSingleFlight(() => structure.mutateAsync())
+
   const trimmed = notes.trim()
   const isEmpty = trimmed.length < LIMITS.notesMinChars // E1
   const isTooLong = notes.length > LIMITS.notesMaxChars // E3
@@ -155,7 +167,7 @@ export function ConsultationComposer({
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-3">
           <Button
-            onClick={() => structure.mutate()}
+            onClick={generateOnce}
             disabled={isEmpty || isTooLong || isGenerating}
             /*
               Belt and braces against E24. `disabled` stops the second click

@@ -70,8 +70,26 @@ export function unwrap<T>(response: {
 }): T {
   if (response.error !== null && response.error !== undefined) {
     const envelope = (response.error as { value?: ErrorEnvelope }).value
-    const code = envelope?.error?.code ?? 'UNKNOWN'
-    const message = envelope?.error?.message ?? 'Something went wrong.'
+
+    /**
+     * A refused connection is NOT an API error, and must not be dressed as
+     * one.
+     *
+     * Eden reports "nothing is listening" as status 503 with a value of
+     * {code: "ConnectionRefused"} -- no Appendix 3 envelope, because the
+     * server never answered. Minting an ApiError('UNKNOWN') here made the
+     * dashboard show "Something went wrong. Something went wrong." with no
+     * hint that the API was simply down, which is the one thing the doctor
+     * needs to know in that moment. Found by the offline E2E test.
+     *
+     * Rethrown as a plain Error so presentError takes its offline branch.
+     */
+    if (envelope?.error?.code === undefined) {
+      throw new Error('Could not reach the server.')
+    }
+
+    const code = envelope.error.code
+    const message = envelope.error.message ?? 'Something went wrong.'
     throw new ApiError(code, message, response.status)
   }
 

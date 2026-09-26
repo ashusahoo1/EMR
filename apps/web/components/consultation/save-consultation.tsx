@@ -28,6 +28,7 @@ import { useUnsavedWork } from '@/components/consultation/unsaved-work-context'
 import { ErrorState } from '@/components/states/error-state'
 import { Button } from '@/components/ui/button'
 import { ApiError, api, unwrap } from '@/lib/api'
+import { useSingleFlight } from '@/lib/use-single-flight'
 
 export function SaveConsultation({
   consultationId,
@@ -129,14 +130,14 @@ export function SaveConsultation({
     },
   })
 
+  // E25 on the client: a synchronous latch, declared AFTER the mutation it
+  // wraps. See use-single-flight.ts for why disabled={isPending} is not enough.
+  const saveOnce = useSingleFlight(() => save.mutateAsync())
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <Button
-          onClick={() => save.mutate()}
-          disabled={save.isPending}
-          aria-busy={save.isPending}
-        >
+        <Button onClick={saveOnce} disabled={save.isPending} aria-busy={save.isPending}>
           {save.isPending ? (
             <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
           ) : (

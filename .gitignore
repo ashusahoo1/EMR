@@ -31,3 +31,8 @@ Thumbs.db
 
 # test / coverage
 coverage/
+
+# playwright artefacts
+test-results/
+playwright-report/
+blob-report/

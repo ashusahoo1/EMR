@@ -297,7 +297,7 @@ cd apps/api && bun run src/db/seed.ts
 |---|---|---|
 | 10.1 | Open `/dev/states` | Every loading, empty and error state on one page |
 | 10.2 | Read the error list | Seven distinct failures, each with its own wording |
-| 10.3 | Count retry buttons | **6 of 7** — the 404 has none, because retrying a 404 gives a 404 |
+| 10.3 | Count retry buttons | **5 of 7** — the 404 has none (retrying gives another 404), and neither does "not clinical notes" (a selfie is still a selfie on the second try) |
 | 10.4 | Visit `/no-such-route` | "Page not found" with a link back |
 | 10.5 | **Stop the API**, reload the dashboard | "Could not reach the server. Check that the API is running." **with a working Try again** |
 | 10.6 | Restart the API, press **Try again** | Appointments load |

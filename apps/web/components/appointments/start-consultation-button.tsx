@@ -21,6 +21,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ApiError, api, unwrap } from '@/lib/api'
+import { useSingleFlight } from '@/lib/use-single-flight'
 
 export function StartConsultationButton({
   appointmentId,
@@ -88,12 +89,16 @@ export function StartConsultationButton({
     },
   })
 
+  // E25 on the client: a synchronous latch, declared AFTER the mutation it
+  // wraps. See use-single-flight.ts for why disabled={isPending} is not enough.
+  const startOnce = useSingleFlight(() => start.mutateAsync())
+
   return (
     <Button
       className={className}
       size={size}
       variant={consultationId ? 'outline' : 'default'}
-      onClick={() => start.mutate()}
+      onClick={startOnce}
       disabled={start.isPending}
       aria-busy={start.isPending}
     >

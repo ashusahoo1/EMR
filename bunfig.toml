@@ -4,3 +4,10 @@
 # with "DATABASE_URL is not set" -- and it would fail the same way in CI (D3).
 [test]
 preload = ["./scripts/test-setup.ts"]
+
+# The Playwright E2E specs live in e2e/ and use the *.spec.ts convention that
+# Playwright expects. Bun's default discovery matches *.spec.ts too, and it
+# chokes on them -- "Playwright Test did not expect test.describe() to be
+# called here" -- because they are written against a different runner. Kept
+# here rather than as a CLI flag so CI's plain `bun test` gets it for free.
+pathIgnorePatterns = ["**/e2e/**"]

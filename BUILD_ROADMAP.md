@@ -793,7 +793,15 @@ Setup · env vars · architecture diagram · **scope decisions stated as decisio
 
 - F8 photo input is our product addition, not in the brief (§3.5)
 - The uploaded image is deliberately not persisted (§2.3)
-- No E2E / component tests, and why L2 covers it (§5.10)
+- ~~No E2E / component tests, and why L2 covers it (§5.10)~~ **Reversed — see below.** Component tests are still deliberately absent.
+
+> **Amended during the build: the no-E2E decision was wrong, and the evidence is specific.** §5.10 assumed the L2 in-process tests would cover the whole path. They cover the *API's* behaviour; they cannot see the *browser's* — hydration, React Query caching, form focus, the navigation guard, and above all **the exact sequence of requests the client sends**. Manual testing found three real bugs in precisely those gaps (verification not persisted, appointment stuck on Waiting, search results misread), and every one had a green L2 suite behind it, because a test that drives the API directly asserts a sequence the application never performs.
+>
+> A Playwright suite (`e2e/`, run with `bun run test:e2e`) now drives a real Chromium through every flow in `MANUAL_TEST.md` — 45 checks, including a 320px phone profile. It owns its own API and web servers on ports 4100/3150 so it never touches a developer's running instances, and the API runs against the stub, so it needs no key.
+>
+> **Its first run found three more bugs that no other layer could have.** (1) **E24 was broken:** `disabled={isPending}` only takes effect after React re-renders, and a genuine double-click delivers both events before that — two `/structure` requests reached the server. A human cannot click faster than a re-render, which is why the manual check "passed". Fixed with a synchronous latch (`use-single-flight.ts`), applied to Generate, Save and Start alike. (2) **Offline was misreported:** Eden surfaces a refused connection as a 503 with no error envelope, which `unwrap` minted into an `ApiError('UNKNOWN')`, so the dashboard read "Something went wrong. Something went wrong." with no hint the API was down. (3) **The filter tab strip overflowed a 320px viewport** by 45px — the only horizontal-scroll failure on the site.
+>
+> Two corrections to this plan's own claims came out of it too: the states preview has **5** retryable errors of 7, not 6 (NOT_CLINICAL_NOTES is correctly non-retryable — a selfie is still a selfie on the second try), and the unit runner had to be told to ignore `e2e/` since both runners match `*.spec.ts`.
 - Known limitation: no auth, so patient access is not isolated (E38) — **state it, do not pretend it is handled**
 - Negation checking is a word-list heuristic, not clinical NLP
 - Golden-set eval results with hallucination and omission counted separately

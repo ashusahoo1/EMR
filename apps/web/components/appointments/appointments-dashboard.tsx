@@ -100,31 +100,40 @@ export function AppointmentsDashboard() {
         </div>
       </header>
 
-      <Tabs
-        value={filter}
-        onValueChange={(value) => setFilter(value as Filter)}
-        className="mb-4"
-      >
-        <TabsList>
-          {FILTERS.map(({ value, label }) => (
-            <TabsTrigger key={value} value={value}>
-              {label}
-              {/*
+      {/*
+        RESPONSIVE (found by the E2E mobile run, not by hand). Four tabs
+        with their counts need ~340px on one line; a 320px phone has less.
+        shadcn's TabsList is `w-fit`, so it simply overflowed the page and
+        the dashboard scrolled sideways -- the one horizontal-scroll failure
+        on the whole site. The strip now scrolls WITHIN its own bounds
+        instead: the segmented-control affordance survives (wrapping would
+        break it) and the counts stay readable (shrinking would not).
+        `overscroll-x-contain` keeps a swipe on the strip from dragging the
+        page.
+      */}
+      <div className="mb-4 max-w-full overflow-x-auto overscroll-x-contain">
+        <Tabs value={filter} onValueChange={(value) => setFilter(value as Filter)}>
+          <TabsList>
+            {FILTERS.map(({ value, label }) => (
+              <TabsTrigger key={value} value={value}>
+                {label}
+                {/*
                 The count per tab, so the doctor can see there are three
                 people waiting without selecting the tab to find out.
                 Suppressed while loading, when the number would be a lie.
               */}
-              {!isPending && !error && (
-                <span className="ml-1.5 text-muted-foreground text-xs tabular-nums">
-                  {value === 'all'
-                    ? appointments.length
-                    : appointments.filter((a) => a.status === value).length}
-                </span>
-              )}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+                {!isPending && !error && (
+                  <span className="ml-1.5 text-muted-foreground text-xs tabular-nums">
+                    {value === 'all'
+                      ? appointments.length
+                      : appointments.filter((a) => a.status === value).length}
+                  </span>
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      </div>
 
       {isPending && <LoadingState rows={4} label="Loading appointments" />}
 
