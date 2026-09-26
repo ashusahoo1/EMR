@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input'
 import { ApiError, api, unwrap } from '@/lib/api'
 import { formatDateShort, formatPatientMeta } from '@/lib/format'
 import { useDebounced } from '@/lib/use-debounced'
+import { cn } from '@/lib/utils'
 
 export function HeaderSearch() {
   const [query, setQuery] = useState('')
@@ -157,8 +158,23 @@ export function HeaderSearch() {
                   href={`/patients/${consultation.patientId}`}
                   onNavigate={() => setIsOpen(false)}
                   icon={<FileTextIcon className="size-3.5" aria-hidden="true" />}
-                  title={consultation.patientName}
-                  subtitle={`${formatDateShort(consultation.createdAt)} · ${consultation.excerpt}`}
+                  /*
+                    THE EXCERPT LEADS, not the patient's name.
+
+                    Manual testing found that a consultation result titled
+                    "Ramesh Iyer" reads as a PATIENT result -- the section
+                    heading says "Consultation notes" and the icon is a
+                    document, but the eye goes to the largest text, and the
+                    largest text was a name. Searching "hypertension" and
+                    getting back what looks like a list of people is a small
+                    lie about what was found.
+
+                    The matched text is what the doctor searched for, so it
+                    goes first; the name and date become the context line.
+                  */
+                  wrapTitle
+                  title={consultation.excerpt}
+                  subtitle={`${consultation.patientName} · ${formatDateShort(consultation.createdAt)}`}
                 />
               ))}
             </Section>
@@ -186,12 +202,15 @@ function ResultLink({
   icon,
   title,
   subtitle,
+  wrapTitle = false,
 }: {
   href: string
   onNavigate: () => void
   icon: React.ReactNode
   title: string
   subtitle: string
+  /** True for excerpts, which must not lose the matched word to truncation. */
+  wrapTitle?: boolean
 }) {
   return (
     <li>
@@ -202,7 +221,20 @@ function ResultLink({
       >
         <span className="mt-0.5 shrink-0 text-muted-foreground">{icon}</span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-sm">{title}</span>
+          {/*
+            A patient name truncates -- it is short and one line is right.
+            An excerpt wraps to two, because the server centres it on the
+            matched word: truncating at one line cuts off the very text the
+            doctor searched for, which was the whole point of the result.
+          */}
+          <span
+            className={cn(
+              'block font-medium text-sm',
+              wrapTitle ? 'line-clamp-2' : 'truncate',
+            )}
+          >
+            {title}
+          </span>
           <span className="block truncate text-muted-foreground text-xs">{subtitle}</span>
         </span>
       </Link>
